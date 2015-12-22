@@ -8,7 +8,16 @@ public:
 	float kp_theta, ki_theta, kd_theta;
 	float e_theta_x, e_theta_y;
 	float d_theta_x, d_theta_y;
+	float d_theta_x_prev, d_theta_y_prev;
 	float int_theta_x, int_theta_y;
+
+	float kp_dtheta, ki_dtheta, kd_dtheta;
+	float e_dtheta_x, e_dtheta_y;
+	float d_dtheta_x, d_dtheta_y;
+	float int_dtheta_x, int_dtheta_y;
+
+
+	float kp_pos, ki_pos, kd_pos;
 	
 	BalanceController(float *_v_x, float *_v_y, 
 					  float *_pos_x, float *_pos_y, float *_theta, 
@@ -25,19 +34,31 @@ public:
 		p = _p; // pitch
 	}
 	void setTunings(float _kp_theta, float _ki_theta, float _kd_theta,
+					float _kp_dtheta, float _ki_dtheta, float _kd_dtheta,
 					float _kp_pos, float _ki_pos, float _kd_pos){
 		kp_theta = _kp_theta;
 		ki_theta = _ki_theta;
 		kd_theta = _kd_theta;
 
+		kp_dtheta = _kp_dtheta;
+		ki_dtheta = _ki_dtheta;
+		kd_dtheta = _kd_dtheta;
+
 		kp_pos = _kp_pos;
 		ki_pos = _ki_pos;
 		kd_pos = _kd_pos;
 	}
+	void setTipLimit(int _tip_limit){
+		tip_limit = _tip_limit;
+	}
 	void setOffset(float _targ_theta_x, float _targ_theta_y,
+				   float _targ_dtheta_x, float _targ_dtheta_y,
 				   float _targ_pos_x, float _targ_pos_y){
 		targ_theta_x = _targ_theta_x;
 		targ_theta_y = _targ_theta_y;
+
+		targ_dtheta_x = _targ_dtheta_x;
+		targ_dtheta_y = _targ_dtheta_y;
 
 		targ_pos_x = _targ_pos_x;
 		targ_pos_y = _targ_pos_y;
@@ -51,28 +72,50 @@ public:
 		*v_y = 0;
 
 		if (balance){
-			d_theta_x = (*p - p_prev)/dt;
-			d_theta_y = (*r - r_prev)/dt;
+			d_theta_x = (*p - p_prev)*1000000/dt;
+			d_theta_y = (*r - r_prev)*1000000/dt;
 
 			p_prev = *p;
 			r_prev = *r;
+			
+			e_theta_x = targ_theta_x - *p;
+			e_theta_y = targ_theta_y - *r;			
 
-			if (balanceModeDerivative){
-				// this mode means that the derivative is also counted into
-				// error (as we ideally want the derivative to be 0 as well)
-				e_theta_x = (targ_theta_x - *p) + 200*d_theta_x;  
-				e_theta_y = (targ_theta_y - *r) + 200*d_theta_y;  
-			}
-			else{
-				e_theta_x = targ_theta_x - *p;
-				e_theta_y = targ_theta_y - *r;
-			}
+			int_theta_x += ki_theta * e_theta_x * dt / 1000000;
+			int_theta_y += ki_theta * e_theta_y * dt / 1000000;
 
-			int_theta_x += ki_theta * e_theta_x * dt;
-			int_theta_y += ki_theta * e_theta_y * dt;
 
-			*v_x += kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x;
-			*v_y += kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y;
+
+			// doesn't work well (at least with first try)
+			// targ_theta_x -= int_theta_x * 0.0001;
+			// targ_theta_y -= int_theta_y * 0.0001;
+
+			d_dtheta_x = (d_theta_x - d_theta_x_prev)*1000000/dt;
+			d_dtheta_y = (d_theta_y - d_theta_y_prev)*1000000/dt;
+
+			d_theta_x_prev = d_theta_x;
+			d_theta_y_prev = d_theta_y;
+
+			e_dtheta_x = targ_dtheta_x - d_theta_x;
+			e_dtheta_y = targ_dtheta_y - d_theta_y;
+
+			int_dtheta_x += ki_dtheta * e_dtheta_x * dt / 1000000;
+			int_dtheta_y += ki_dtheta * e_dtheta_y * dt / 1000000;
+
+			// *v_x += kp_dtheta * e_dtheta_x + int_dtheta_x + kd_dtheta * d_dtheta_x;
+			// *v_y += kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;
+			// *v_x += 1;
+			// *v_y += 1;
+
+			*v_x = kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
+				  + kp_dtheta * e_dtheta_x + int_dtheta_x + kd_dtheta * d_dtheta_x;
+			*v_y = kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
+			      + kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;
+
+			// *v_x = kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
+			// 	  + kp_dtheta * e_dtheta_x;
+			// *v_y = kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
+			//       + kp_dtheta * e_dtheta_y;
 		}
 
 		if (pos_cor){
@@ -111,37 +154,50 @@ public:
 			*v_x += temp_x;
 			*v_y += temp_y;
 		}
-		if (abs(*v_x) > 150 || abs(*v_y) > 150){
-			if (abs(*v_x) > 150) *v_x = 150 * SIGN(*v_x);
-			if (abs(*v_y) > 150) *v_y = 150 * SIGN(*v_y);
+
+		if (abs(*v_x) > tip_limit || abs(*v_y) > tip_limit){
+			if (abs(*v_x) > tip_limit) *v_x = tip_limit * SIGN(*v_x);
+			if (abs(*v_y) > tip_limit) *v_y = tip_limit * SIGN(*v_y);
 			return false;
 		}
 
 		return true;
 	}
-	void enablePosCorrection(){
-		pos_cor = true;
-	}
-	void disablePosCorrection(){
-		pos_cor = false;
-
+	void resetPosCorrection(){
 		pos_x_prev = 0;
 		pos_y_prev = 0;
 
 		int_pos_x = 0;
 		int_pos_y = 0;
-	}
-	void enableBalance(){
-		balance = true;
-	}
-	void disableBalance(){
-		balance = false;
 
+		*v_x = 0;
+		*v_y = 0;
+	}
+	void enablePosCorrection(){
+		pos_cor = true;
+		resetPosCorrection();
+	}
+	void disablePosCorrection(){
+		pos_cor = false;
+		resetPosCorrection();		
+	}
+	void resetBalance(){
 		p_prev = 0;
 		r_prev = 0;
 
 		int_theta_x = 0;
 		int_theta_y = 0;
+
+		*v_x = 0;
+		*v_y = 0;
+	}
+	void enableBalance(){
+		balance = true;
+		resetBalance();
+	}
+	void disableBalance(){
+		balance = false;
+		resetBalance();
 	}
 	void enablePosCorFlip(){
 		flip_pos_cor = true;
@@ -170,6 +226,8 @@ private:
 	bool enabled = true;
 	elapsedMicros deltaT;
 
+	int tip_limit = 150;
+
 	float *v_x, *v_y;
 
 	float *r, *p;
@@ -185,11 +243,13 @@ private:
 	
 	float targ_theta_x, targ_theta_y;
 
+	/* dtheta var */
+	float targ_dtheta_x, targ_dtheta_y;
+
 	/* pos correction */
 	bool pos_cor = true;
 	bool flip_pos_cor = false;
 
-	float kp_pos, ki_pos, kd_pos;
 	float e_pos_x, e_pos_y;
 	float d_pos_x, d_pos_y;
 	float int_pos_x, int_pos_y;

@@ -9,6 +9,11 @@
 #define LED      13
 #define LED2     28
 
+#define BLINK_OK_INTERVAL 500
+#define BLINK_SENSOR_ERR_INTERVAL 200
+#define BLINK_STOPPED_INTERVAL 75
+#define BLINK_CALIB_MOTOR_INTERVAL 2000
+
 #define PWM_FREQ  16000
 
 #define MT_A_DIR  4
@@ -31,7 +36,7 @@
 #define MT_C_FLIP false
 #define MT_C_CS   A11
 
-#define INT_UPDATE_INTERVAL 75
+#define INT_UPDATE_INTERVAL 18
 
 // #define ENCXA	   21
 // #define ENCXB	   17
@@ -104,6 +109,7 @@
 		Serial.print('\t'); }                         \
 	Serial.println('}'); }                            \
 
+int blinkInterval = BLINK_OK_INTERVAL;
 
 MPU9250 mpu(SPI_CLOCK, SS_PIN);
 
@@ -111,6 +117,7 @@ int16_t mag_max[3];
 int16_t mag_min[3];
 
 float roll, pitch, yaw;
+float roll_offset, pitch_offset;
 
 float mag_scalar[3], mag_bias[3];
 
@@ -119,21 +126,22 @@ PMOTOR motorB(MT_B_PWM, MT_B_DIR, MT_B_BRK, MT_B_FLIP, MT_B_CS);
 PMOTOR motorC(MT_C_PWM, MT_C_DIR, MT_C_BRK, MT_C_FLIP, MT_C_CS);
 
 int32_t pA, pB, pC;
+int32_t motorMinPwr = 12;
 
 omnidrive omni(&pA, &pB, &pC);
 
 IntervalTimer intService;
 /* since there are 4 phases a quadrature encoder goes through, there are 16 combinations, many of which
    are invalid (and hence = 0) */
-int32_t enc_TAB[]= { 0, 1, -1, 0,
- 					-1, 0,  0, 1,
- 					 1, 0,  0,-1,
- 					 0,-1,  1, 0 };
+const int32_t enc_TAB[]= { 0, 1, -1, 0,
+ 						  -1, 0,  0, 1,
+ 						   1, 0,  0,-1,
+ 						   0,-1,  1, 0 };
 
 volatile uint32_t encState = 0, lEncState = 0;
 volatile uint32_t encIndex;
 
-volatile int32_t channelCount = 0, intUpdateCount = 0;
+volatile uint32_t channelCount = 0, intUpdateCount = 0;
 
 volatile int32_t rtA = 0, rtB = 0, rtC = 0, rtD = 0;	// Realtime values
 volatile int32_t prA = 0, prB = 0, prC = 0, prD = 0;	// Previous values
@@ -141,6 +149,8 @@ volatile int32_t prA = 0, prB = 0, prC = 0, prD = 0;	// Previous values
 float vA = 0, vB = 0, vC = 0, vD = 0;	// wheel velocity (m/s)
 float wA = 0, wB = 0, wC = 0, wD = 0;   // angular velocity (rad/s)
 float tA = 0, tB = 0, tC = 0, tD = 0;   // wheel angle
+
+elapsedMicros encUpdateDt;
 
 volatile float vA_targ, vB_targ, vC_targ, vD_targ; // target angular velocity
 
@@ -154,6 +164,27 @@ float theta;
 BalanceController bController(&v_x, &v_y, &pos_x, &pos_y, &theta, &roll, &pitch);
 LocationCalculator lCalculator(CHASSIS_R, 180, 60, 300, &vA, &vB, &vC);
 
+bool btDebug = true;
+bool serDebug = true;
+
+bool calibMotorMode = false;
+bool calibMotorModeDir = true;
+elapsedMicros calibMotorModeDt;
+int calibMotorModeAmplitude = 10;
+
+uint32_t loopCount = 0;
+uint32_t pidUpdateCount = 0;
+
+
+void storeBalanceTunings();
+void readBalanceTunings();
+void storePosTunings();
+void readPosTunings();
+void storeState();
+void readState();
+void storeIMUOffset();
+void readIMUOffset();
+
 void calibMagRoutine();
 void calcMagCalib();
 void storeMagCalib();
@@ -162,15 +193,32 @@ void mpuRead();
 void fusionUpdate();
 void fusionGetEuler();
 inline void encoderPoll();
+inline void encoderGetVelocity();
 bool bluetoothEcho();
-
-bool btDebug = true;
-bool serDebug = true;
+void calibMotorModeRoutine();
 
 // controller for serial interface
-class SerialController{
+class SerialController : public Print{
 public:
 	SerialController(Stream& _port): port(_port) {}
+	bool readData(char buff[], float my_array[], int len){
+		int i = 0;
+		char *tok = strtok(buff, ",");
+		while (tok != 0 && i < len){
+		    my_array[i] = atof(tok);
+		    tok = strtok(0, ",");
+		    // port.println(my_array[i]);
+		    i++;
+		}
+		if (tok != 0 || i != len){
+			port.println("Incorrect number of inputs:");
+			port.print('\t');
+			port.print(len);
+			port.println(" comma separated values required");
+			return false;
+		}
+		return true;
+	}
 	void update(){
 		if (ready){
 	        ready = false;
@@ -181,59 +229,277 @@ public:
 	        switch(command){
 	        	case 'c':
 	        		{
-	        		port.println("Starting magnetometer calibration");
+	        		bcBalanceEnabled = bController.balanceEnabled();
+	        		bcPosCorEnabled = bController.posCorEnabled();
+
 	        		bController.disable();
+
+	        		port.println("Starting magnetometer calibration");	        		
 	        		calibMagRoutine();
 	        		port.println("Finished calibration");
 	        		storeMagCalib();
 	        		port.println("Stored calibration");
-	        		bController.enable();
+
+	        		if (bcBalanceEnabled) bController.enableBalance();
+	        		if (bcPosCorEnabled)  bController.enablePosCorrection();
 	        		}
 	        		break;
-			    case 's':	// set PID parameters
+	        	case 'i':
+	        		{
+	        		port.println("Status: ");
+	        		port.print('\t');
+	        		port.print("balanceEnabled = ");
+	        		port.print(bController.balanceEnabled());	port.print(", ");
+	        		port.print("posCorEnabled = ");
+	        		port.print(bController.posCorEnabled());	port.print(", ");
+	        		port.print("calibMotorMode = ");
+	        		port.print(calibMotorMode);					port.print(", ");
+	        		port.print("blinkInterval = ");
+	        		port.print(blinkInterval);
+	        		port.print(" (");
+	        		switch(blinkInterval){
+	        			case BLINK_OK_INTERVAL:				port.print("BLINK_OK_INTERVAL");		  break;
+	        			case BLINK_STOPPED_INTERVAL:		port.print("BLINK_STOPPED_INTERVAL");	  break;				
+	        			case BLINK_CALIB_MOTOR_INTERVAL:	port.print("BLINK_CALIB_MOTOR_INTERVAL"); break;						
+	        			case BLINK_SENSOR_ERR_INTERVAL:		port.print("BLINK_SENSOR_ERR_INTERVAL");  break;				
+	        			default:							port.print("???");						  break;						
+	        		}
+	        		port.println(")");
+
+	        		port.println("Tunings: ");
+	        		port.print('\t');
+	        		port.print(bController.kp_theta, 8); 	port.print(", ");
+	        		port.print(bController.ki_theta, 8); 	port.print(", ");
+	        		port.print(bController.kd_theta, 8); 	port.print(", ");
+	        		port.print(bController.kp_dtheta, 8); 	port.print(", ");
+	        		port.print(bController.ki_dtheta, 8); 	port.print(", ");
+	        		port.print(bController.kd_dtheta, 8); 	port.print(", ");
+	        		port.print(bController.kp_pos, 8); 		port.print(", ");
+	        		port.print(bController.ki_pos, 8); 		port.print(", ");
+	        		port.println(bController.kd_pos, 8);
+	        		}
+	        		break;
+			    case 't':	// set PID parameters
 			    	{
+			    	bcBalanceEnabled = bController.balanceEnabled();
+	        		bcPosCorEnabled = bController.posCorEnabled();
 			    	bController.disable();
-			    	float my_array[7];
-					int i = 0;
-					char * tok = strtok(buffer, ",");
-					while (tok != 0 && i < 7) {
-					    my_array[i] = atof(tok);
-					    tok = strtok(0, ",");
-					    port.println(my_array[i]);
-					    i++;
-					}
-					if (i != 6){
-						port.println("Incorrect number of inputs:");
-						port.println("\t6 comma separated values required");
-					}
-					else{
+
+			    	float my_array[9];
+
+					if (readData(buffer, my_array, 9)){
 						bController.setTunings(my_array[0], my_array[1], my_array[2],
-										   	   my_array[3], my_array[4], my_array[5]);
+					 					   	   my_array[3], my_array[4], my_array[5],
+					 					   	   my_array[6], my_array[7], my_array[8]);
+						port.println("Set PID parameters: ");	port.print('\t');						
+						port.print(my_array[0], 8);				port.print('\t');
+						port.print(my_array[1], 8);				port.print('\t');
+						port.print(my_array[2], 8);				port.print('\t');
+						port.print(my_array[3], 8);				port.print('\t');
+						port.print(my_array[4], 8);				port.print('\t');
+						port.print(my_array[5], 8);				port.print('\t');
+						port.print(my_array[6], 8);				port.print('\t');
+						port.print(my_array[7], 8);				port.print('\t');
+						port.println(my_array[8], 8);
 					}
-					bController.enable();
+
+					//delay(1000);
+					if (bcBalanceEnabled) bController.enableBalance();
+	        		if (bcPosCorEnabled)  bController.enablePosCorrection();
 					}
 			    	break;
 			    case 'e':
 			    	{
-			    	port.println("Enabled bController");
-			    	bController.enable();
+			    	if (buffer[1] == 'b'){
+				    	port.println("Enabled balancing");
+				    	bController.enableBalance();
+				    }
+				    else if (buffer[1] == 'p'){
+				    	port.println("Enabled pos correction");
+				    	bController.enablePosCorrection();
+			    	}
+			    	else{
+			    		port.println("Enabled bController");
+			    		bController.enable();
+			    	}
 			    	}
 					break;
 				case 'd':
 					{
-					port.println("Disabled bController");
-					bController.disable();
+					if (buffer[1] == 'b'){
+				    	port.println("Disabled balancing");
+				    	bController.disableBalance();
+				    }
+				    else if (buffer[1] == 'p'){
+				    	port.println("Disabled pos correction");
+				    	bController.disablePosCorrection();
+			    	}
+			    	else{
+			    		port.println("Disabled bController");
+			    		bController.disable();
+			    	}
 					}
 					break;
-				case 'p':
+				case ']':
 					btDebug = false;
 					serDebug = false;
 					break;
-				case 'r':
+				case '[':
 					btDebug = true;
 					serDebug = true;
 					break;
-			    default: break;
+				case '+':
+					{
+					float my_array[1];
+					if (readData(buffer, my_array, 1)){
+						if (my_array[0] <= 0){
+							port.println("Amplitude cannot be negative or zero");
+						}
+						else if (my_array[0] <= 20){
+							port.println("Minimum amplitude of 20 required");
+						}
+						else if (my_array[0] > 255){
+							port.println("Maximum amplitude of 255");
+						}
+						else{
+							port.print("Amplitude set at ");
+							calibMotorModeAmplitude = (int)my_array[0];
+							port.println("Enabled calib motor mode.");
+							port.println("Disabled balancing (if not already)");
+							port.println("---");
+
+							calibMotorMode = true;
+							calibMotorModeDt = 0;
+							pA = 0; pB = 0; pC = 0;
+
+							bcBalanceEnabled = bController.balanceEnabled();
+	        				bcPosCorEnabled = bController.posCorEnabled();
+
+							bController.disable();
+							blinkInterval = BLINK_CALIB_MOTOR_INTERVAL;
+						}						
+					}
+					delay(1000);
+					}					
+					break;
+				case '-':
+					port.println("Disabled calib motor mode.");
+					delay(1000); // so you can see the text
+					calibMotorMode = false;
+					pA = 0; pB = 0; pC = 0;
+					blinkInterval = BLINK_OK_INTERVAL;
+					if (bcBalanceEnabled) bController.enableBalance();
+	        		if (bcPosCorEnabled)  bController.enablePosCorrection();
+					break;
+				case '_':
+					{
+			    	bController.disable();
+			    	float my_array[1];
+
+					if (readData(buffer, my_array, 1)){
+						port.print("Set motorMinPwr from ");
+						port.print(motorMinPwr);
+						port.print(" to ");
+						motorMinPwr = (int32_t)my_array[0];
+						port.println(motorMinPwr);
+					}
+
+					// delay(1000);
+					bController.enable();
+					}
+					break;
+				case 'z':
+					{
+					bcBalanceEnabled = bController.balanceEnabled();
+	        		bcPosCorEnabled = bController.posCorEnabled();
+
+	        		if (buffer[1] == 'i'){
+						roll_offset = roll + roll_offset;
+						pitch_offset = pitch + pitch_offset;
+						port.print("Zeroed at r = ");
+						port.print(roll_offset);
+						port.print(" p = ");
+						port.println(pitch_offset);
+					}
+					else if (buffer[1] == 'p'){
+						pos_x = 0;
+						pos_y = 0;
+						lCalculator.zero();
+						port.println("Zeroed position");
+					}
+
+					if (bcBalanceEnabled) bController.enableBalance();
+	        		if (bcPosCorEnabled)  bController.enablePosCorrection();
+					}
+					break;
+				case 's':
+					{
+					if (buffer[1] == 'b'){
+						// balance. correction tunings
+						port.println("Stored balance tunings");
+						storeBalanceTunings();
+					}
+					else if (buffer[1] == 'p'){
+						// pos. correction tunings
+						port.println("Stored pos. tunings");
+						storePosTunings();
+					}
+					else if (buffer[1] == 'i'){
+						// imu offset
+						port.println("Stored IMU offset");
+						storeIMUOffset();
+					}
+					else if (buffer[1] == 's'){
+						// current state (i.e. which things are enabled)
+						port.println("Stored current state");
+						storeState();
+					}
+					else{
+						// all of it
+						port.println("Stored all of it");
+						storeBalanceTunings();
+						storePosTunings();
+						storeIMUOffset();
+						storeState();
+					}
+					}
+					break;
+				case 'r':
+					{
+					if (buffer[1] == 'b'){
+						// balance. correction tunings
+						port.println("Read balance tunings");
+						readBalanceTunings();
+					}
+					else if (buffer[1] == 'p'){
+						// pos. correction tunings
+						port.println("Read pos. tunings");
+						readPosTunings();
+					}
+					else if (buffer[1] == 'i'){
+						// imu offset
+						port.println("Read IMU offset");
+						readIMUOffset();
+					}
+					else if (buffer[1] == 's'){
+						// current state (i.e. which things are enabled)
+						port.println("Read previous state");
+						readState();
+					}
+					else{
+						// all of it
+						port.println("Read all of it");
+						readBalanceTunings();
+						readPosTunings();
+						readIMUOffset();
+						readState();
+					}
+					}
+					break;
+
+			    default: 
+			    	// port.println("???");
+			    	break;
 			}
 	    } 
 	    else{
@@ -248,39 +514,150 @@ public:
 	        }
 	    }
 	}
+	void append(char c){
+		outBuffer[outBuffIndex] = c;
+		outBuffIndex++;
+		// if (outBuffIndex == outBuffSize){
+		// 	// out of bounds. We can either clear the buffer or shift it down
+		// 	// for now shift it down
+		// 	ARRAYSHIFTDOWN(outBuffer, 0, outBuffSize-1);
+		// 	outBuffIndex = outBuffSize-1;
+		// }
+		if (outBuffIndex == outBuffSize){
+			outBuffIndex = 0;
+		}
+	}
+
+	void send(){
+		// port.write(outBuffer, outBuffIndex);
+		for (int i = 0; i < outBuffIndex; i++){
+			port.print(outBuffer[i]);
+			delayMicroseconds(10);
+		}
+		outBuffIndex = 0;
+	}
+
+	using Print::write;   // inherit Print (see core)
+
+	size_t write(uint8_t b){
+		append((char)b);
+		// port.print(b);
+		return 1;
+	}
 private:
 	Stream &port;
+	/* reading */
 	char buffer [32];
 	int cnt = 0;
 	bool ready = false;
+
+	/* writing */
+	static const int outBuffSize = 512;
+	char outBuffer[outBuffSize];
+	int outBuffIndex = 0;
+
+	bool bcBalanceEnabled;
+	bool bcPosCorEnabled;
 };
 
 SerialController btCtrl(BT);
-SerialController serialCtrl(Serial);
+SerialController serCtrl(Serial);
 
-// class SerialServo
-// {
-//   Stream & port_; // http://forum.arduino.cc/index.php?topic=190210.0#lastPost  Reply #14
-  
-//   public:
-//   // constructor
-//     SerialServo (Stream & port) : port_ (port) { }
-  
-//   // methods
-//     void Number_of_Channels(uint8_t channel = 4);
-//     void Move(uint8_t channel, uint8_t position);
-//  void AdjustLeftRight(uint8_t L, uint8_t R);
-//  void Calibrate(){
-//  	port_.print("hi");
-//  }
+void storeBalanceTunings(){
+	EEPROM_writeAnything(200, bController.kp_theta);
+	EEPROM_writeAnything(204, bController.ki_theta);
+	EEPROM_writeAnything(208, bController.kd_theta);
+	EEPROM_writeAnything(252, bController.kp_dtheta);
+	EEPROM_writeAnything(256, bController.ki_dtheta);
+	EEPROM_writeAnything(260, bController.kd_dtheta);
+}
 
-//   private:
-//     uint8_t left, right;
-//     unsigned int ServoNum[35];
-// };
+void readBalanceTunings(){
+	float _kp_theta, _ki_theta, _kd_theta;
+	float _kp_dtheta, _ki_dtheta, _kd_dtheta;
+	EEPROM_readAnything(200, _kp_theta);
+	EEPROM_readAnything(204, _ki_theta);
+	EEPROM_readAnything(208, _kd_theta);
+	EEPROM_readAnything(252, _kp_dtheta);
+	EEPROM_readAnything(256, _ki_dtheta);
+	EEPROM_readAnything(260, _kd_dtheta);
+	bController.setTunings(
+		_kp_theta,
+		_ki_theta,
+		_kd_theta,
+		_kp_dtheta,
+		_ki_dtheta,
+		_kd_dtheta,
+		bController.kp_pos,
+		bController.ki_pos,
+		bController.kd_pos
+	);
+}
 
-// SerialServo ss (Serial);
+void storePosTunings(){
+	EEPROM_writeAnything(212, bController.kp_pos);
+	EEPROM_writeAnything(216, bController.ki_pos);
+	EEPROM_writeAnything(220, bController.kd_pos);
+}
+void readPosTunings(){
+	float _kp_pos, _ki_pos, _kd_pos;
+	EEPROM_readAnything(212, _kp_pos);
+	EEPROM_readAnything(216, _ki_pos);
+	EEPROM_readAnything(220, _kd_pos);
+	bController.setTunings(
+		bController.kp_theta,
+		bController.ki_theta,
+		bController.kd_theta,
+		bController.kp_dtheta,
+		bController.ki_dtheta,
+		bController.kd_dtheta,
+		_kp_pos,
+		_ki_pos,
+		_kd_pos
+	);
+}
 
+void storeState(){
+	bool bcBalanceEnabled = bController.balanceEnabled();
+	bool bcPosCorEnabled = bController.posCorEnabled();
+	EEPROM_writeAnything(224, bcBalanceEnabled);
+	EEPROM_writeAnything(228, bcPosCorEnabled);
+	EEPROM_writeAnything(232, calibMotorMode);
+	EEPROM_writeAnything(236, serDebug);
+	EEPROM_writeAnything(240, btDebug);
+}
+void readState(){
+	bool bcBalanceEnabled, bcPosCorEnabled;
+	EEPROM_readAnything(224, bcBalanceEnabled);
+	EEPROM_readAnything(228, bcPosCorEnabled);
+	EEPROM_readAnything(232, calibMotorMode);
+	EEPROM_readAnything(236, serDebug);
+	EEPROM_readAnything(240, btDebug);
+	if (bcBalanceEnabled != bController.balanceEnabled()){
+		if (bcBalanceEnabled){
+			bController.enableBalance();
+		}
+		else{
+			bController.disableBalance();
+		}
+	}
+	if (bcPosCorEnabled != bController.posCorEnabled()){
+		if (bcPosCorEnabled){
+			bController.enablePosCorrection();
+		}
+		else{
+			bController.disablePosCorrection();
+		}
+	}
+}
+void storeIMUOffset(){
+	EEPROM_writeAnything(244, roll_offset);
+	EEPROM_writeAnything(248, pitch_offset);
+}
+void readIMUOffset(){
+	EEPROM_readAnything(244, roll_offset);
+	EEPROM_readAnything(248, pitch_offset);
+}
 
 /* Magnetometer calibration stuff
  *   Need to calibrate the AK8963 for hard and soft iron distortion
@@ -404,8 +781,8 @@ void fusionUpdate(){
 
 void fusionGetEuler(){
 	sensfusionGetEulerRPY(&roll, &pitch, &yaw);
-	roll += 0;
-	pitch += 4.7;
+	roll -= roll_offset;
+	pitch -= pitch_offset;
 }
 
 /* Poll encoders
@@ -431,6 +808,31 @@ inline void encoderPoll(){
 	lEncState = encState;
 }
 
+inline void encoderGetVelocity(){
+	int dt = encUpdateDt;
+	encUpdateDt = 0;
+
+	// Serial.print((rtA - prA)); Serial.print('\t');
+	// Serial.print(dt, 20);		Serial.print('\t');
+	// Serial.print((rtA - prA)/dt);		Serial.print('\t');
+	// Serial.println((rtA - prA)/CPRAD);
+	wA = (rtA - prA) * 1000000 / dt / CPRAD;
+	// wA /= 1000000;
+	vA = wA * WHEEL_R;
+	tA += wA * dt;
+
+	wB = (rtB - prB) * 1000000/ dt / CPRAD;
+	vB = wB * WHEEL_R;
+	tB += wB * dt;
+
+	wC = (rtC - prC) * 1000000 / dt / CPRAD;
+	vC = wC * WHEEL_R;
+	tC += wC * dt;
+
+	prA = rtA; // cleanup
+	prB = rtB;
+	prC = rtC;
+}
 
 bool bluetoothEcho(){
 	char c;
@@ -443,4 +845,37 @@ bool bluetoothEcho(){
 		BT.print(c);
 	}
 	return true;
+}
+
+void calibMotorModeRoutine(){
+	if (calibMotorModeDt >= 100000){
+		calibMotorModeDt = 0;
+		if (pA == calibMotorModeAmplitude){
+			calibMotorModeDir = false;
+		}
+		else if (pA == -calibMotorModeAmplitude){
+			calibMotorModeDir = true;
+		}
+		if (calibMotorModeDir){
+			pA++;
+			pB++;
+			pC++;
+		}
+		else{
+			pA--;
+			pB--;
+			pC--;
+		}
+	}
+	BT.print(calibMotorModeDt); BT.print('\t');
+	BT.print(pA); BT.print('\t');
+	BT.print(wA); BT.print('\t');
+	BT.print(wB); BT.print('\t');
+	BT.print(wC); BT.println();
+
+	Serial.print(calibMotorModeDt); Serial.print('\t');
+	Serial.print(pA); Serial.print('\t');
+	Serial.print(wA); Serial.print('\t');
+	Serial.print(wB); Serial.print('\t');
+	Serial.print(wC); Serial.println();
 }

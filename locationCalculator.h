@@ -103,6 +103,10 @@ public:
 		//Serial.println(dt);
 		update(dt);
 	}
+	void zero(){
+		x = 0;
+		y = 0;
+	}
 private:	
 	elapsedMicros deltaT;
 	unsigned long dt; // in us

@@ -51,24 +51,40 @@ void thingy(){
  		Serial.println("none");
  	}
 }
-void setup() {
+
+extern "C" int main () {
 	SPI.setSCK(SCK_PIN);    // change SCK pin from 13 to 14 since 13 also has a useful LED
 	SPI.begin();
 	Serial.begin(115200);   // doesn't really matter what we put here (Teensy 3.x serial isn't "real" serial)
-	//while(!Serial.available()){};
-	BT.begin(115200);  // RN42 default baud
+	// WAITFORINPUT();
+	// CLEARSERIAL();
+	// BT.begin(230400);  // RN42 default baud
 	// delay(200);
 	// BT.print("$$$");
 
- // 	delay(200);
- // 	thingy();
- 	
- // 	BT.println("ST,1");   // MUST MAKE SURE RN42 GOES INTO FAST MODE
- // 	delay(200);
- // 	thingy();
- // 	BT.println("---");
+	// delay(200);
+	// thingy();
 
+	// BT.println("SU,23");
+	// delay(200);
+	// thingy();
+
+	// BT.println("E");
+	// delay(400);
+	// thingy();
+
+	// BT.println("D");
+	// delay(400);
+	// thingy();
 	
+	// BT.println("---");
+	// BT.begin(230400);
+	// delay(200);
+	// thingy();
+
+	// WAITFORINPUT();
+	// CLEARSERIAL();
+	BT.begin(230400);
 
 	pinMode(INT_PIN, INPUT);
 	pinMode(LED, OUTPUT);	digitalWriteFast(LED, HIGH);   // initial set LEDs on high
@@ -86,9 +102,9 @@ void setup() {
 
 	uint8_t wai = mpu.whoami();
 	if (wai == 0x71)
-		Serial.println("Successful connection");
+		Serial.println("Successful connection to mpu");
 	else
-		Serial.print("Failed connection: ");
+		Serial.print("Failed connection to mpu: ");
 		Serial.println(wai, HEX);
 
 	uint8_t wai_AK8963 = mpu.AK8963_whoami();
@@ -103,18 +119,14 @@ void setup() {
 	mpu.calib_mag();
 
 	readMagCalib();
+	readBalanceTunings();
+	readPosTunings();
+	readState();
+	readIMUOffset();
 
-	bController.setTunings(
-		10,       // kp for balancing (yaw/pitch)
-		0,        // ki for balancing (yaw/pitch)
-		0,        // kd for balancing (yaw/pitch)
-		1,        // kp for position control
-		0,        // ki for position control
-		0         // kd for position control
-	);
-
-	bController.setOffset(0, 0, 0, 0);
-	bController.enablePosCorFlip();  // flip coordinates
+	bController.setOffset(0, 0, 0, 0, 0, 0);
+	bController.setTipLimit(150);    // limit of velocity component before tip
+	// bController.enablePosCorFlip();  // flip coordinates
 
 	//bController.disableBalance();
 	//bController.disablePosCorrection();
@@ -122,131 +134,160 @@ void setup() {
 	// default priority of 127. The lower the number, the higher the priority.
 	intService.priority(127);  
 	intService.begin(intServiceRoute, INT_UPDATE_INTERVAL);
+
+	while(true){
+		unsigned long now = micros();
+		elapsedMicros elapsed = 0;
+		int loopCountMod4 = loopCount % 4;
+
+		mpuRead(); // takes long time
+		fusionUpdate();  // takes long time
+		
+		if (loopCountMod4 == 0){
+			elapsed = 0;
+			fusionGetEuler(); // inverse trig functions take a long time
+
+			encoderGetVelocity();  // need to first get velocity of wheels before getting pos.
+			lCalculator.update();
+			pos_x = -lCalculator.y;
+			pos_y = -lCalculator.x;
+			theta = lCalculator.theta;
+
+			if ((bController.balanceEnabled() || bController.posCorEnabled()) && !calibMotorMode){
+				blinkInterval = BLINK_OK_INTERVAL;
+				if (!bController.update()){
+					if (btDebug){
+						btCtrl.println("---");
+						btCtrl.println("Fell");
+					}
+					if (serDebug){
+						Serial.println("---");
+						Serial.println("Fell");
+					}
+
+					bController.disable();  // disable balancing
+					blinkInterval = BLINK_STOPPED_INTERVAL;
+				}
+				pidUpdateCount++;
+			}
+
+			if (calibMotorMode){
+				calibMotorModeRoutine();
+			}
+			else{
+				omni.moveCartesian((int)v_x, (int)v_y, 0);
+			}
+
+			if ((bController.balanceEnabled() || bController.posCorEnabled()) && !calibMotorMode){
+				if (btDebug && loopCount % 12 == 0){
+					btCtrl.print(now);  										btCtrl.print('\t');
+					// btCtrl.print(pidUpdateCount);								btCtrl.print('\t');
+					btCtrl.print(roll);											btCtrl.print('\t');
+					btCtrl.print(pitch);										btCtrl.print('\t');
+					btCtrl.print(bController.e_theta_x * bController.kp_theta); btCtrl.print('\t');
+					btCtrl.print(bController.e_theta_y * bController.kp_theta); btCtrl.print('\t');	
+					btCtrl.print(bController.int_theta_x);  					btCtrl.print('\t');
+					btCtrl.print(bController.int_theta_y);  					btCtrl.print('\t');
+					btCtrl.print(bController.d_theta_x * bController.kd_theta); btCtrl.print('\t');
+					btCtrl.print(bController.d_theta_y * bController.kd_theta); btCtrl.print('\t');
+
+					btCtrl.print(bController.e_dtheta_x * bController.kp_dtheta); btCtrl.print('\t');
+					btCtrl.print(bController.e_dtheta_y * bController.kp_dtheta); btCtrl.print('\t');	
+					btCtrl.print(bController.int_dtheta_x);  					btCtrl.print('\t');
+					btCtrl.print(bController.int_dtheta_y);  					btCtrl.print('\t');
+					btCtrl.print(bController.d_dtheta_x * bController.kd_dtheta); btCtrl.print('\t');
+					btCtrl.print(bController.d_dtheta_y * bController.kd_dtheta); btCtrl.print('\t');
+
+					btCtrl.print(v_x);  										btCtrl.print('\t');
+					btCtrl.print(v_y);											btCtrl.print('\t');
+					btCtrl.print(pA);											btCtrl.print('\t');
+					btCtrl.print(pB);											btCtrl.print('\t');
+					btCtrl.print(pC);											btCtrl.print('\t');
+					btCtrl.print(pos_x);  										btCtrl.print('\t');
+					btCtrl.println(pos_y);
+				}
+				if (serDebug){
+					Serial.print(now);  										Serial.print('\t');
+					Serial.print(roll);											Serial.print('\t');
+					Serial.print(pitch);										Serial.print('\t');
+					Serial.print(bController.e_theta_x * bController.kp_theta);	Serial.print('\t');
+					Serial.print(bController.e_theta_y * bController.kp_theta);	Serial.print('\t');	
+					Serial.print(bController.int_theta_x);  					Serial.print('\t');
+					Serial.print(bController.int_theta_y);  					Serial.print('\t');
+					Serial.print(bController.d_theta_x * bController.kd_theta);	Serial.print('\t');
+					Serial.print(bController.d_theta_y * bController.kd_theta);	Serial.print('\t');
+
+					Serial.print(bController.e_dtheta_x * bController.kp_dtheta); Serial.print('\t');
+					Serial.print(bController.e_dtheta_y * bController.kp_dtheta); Serial.print('\t');	
+					Serial.print(bController.int_dtheta_x);  					Serial.print('\t');
+					Serial.print(bController.int_dtheta_y);  					Serial.print('\t');
+					Serial.print(bController.d_dtheta_x * bController.kd_dtheta); Serial.print('\t');
+					Serial.print(bController.d_dtheta_y * bController.kd_dtheta); Serial.print('\t');
+					
+					Serial.print(v_x);  										Serial.print('\t');
+					Serial.print(v_y);											Serial.print('\t');
+					Serial.print(pA);											Serial.print('\t');
+					Serial.print(pB);											Serial.print('\t');
+					Serial.print(pC);											Serial.print('\t');
+					Serial.print(pos_x);  										Serial.print('\t');
+					Serial.println(pos_y);
+				}
+			}
+
+		}
+		else if (loopCountMod4 == 1){
+			// motor velocity pid control
+			if (!calibMotorMode){
+				if (abs(pA) > 0){
+					pA = pA + SIGN(pA) * motorMinPwr;
+				}
+				if (abs(pB) > 0){
+					pB = pB + SIGN(pB) * motorMinPwr;
+				}
+				if (abs(pC) > 0){
+					pC = pC + SIGN(pC) * motorMinPwr;
+				}
+			}
+			motorA.move(pA);
+			motorB.move(pB);
+			motorC.move(pC);
+		}
+
+		serCtrl.update();
+		serCtrl.send();
+		btCtrl.update();
+		btCtrl.send();
+		// delay(1);
+		loopCount++;
+	}
 }
 
-
-void loop() {
-	serialCtrl.update();
-	btCtrl.update();
-}
 
 // this routine is called every INT_UPDATE_INTERVAL microseconds
 void intServiceRoute(){
 	encoderPoll();  // poll encoders
 
 	int intMod10 = intUpdateCount % 10;
-	unsigned long intMod1000 = intUpdateCount % 1000;
+	unsigned long blinkMod = intUpdateCount % (int)(blinkInterval*1000/INT_UPDATE_INTERVAL);
+	// unsigned long now = micros();
 
-	if (intMod1000 == 0){
+	if (blinkMod == 0){
 		digitalWriteFast(LED, !digitalReadFast(LED));
 	}
+
 	if (intMod10 == 0){
 		switch(channelCount){
-			case 0:
-				wA = (rtA - prA) * 1000000 / INT_UPDATE_INTERVAL / 40 / CPRAD;
-				vA = wA * WHEEL_R;
-				tA += wA * INT_UPDATE_INTERVAL * 40 / 1000000;
-				prA = rtA;	   // cleanup
+			case 0:				
 				break;
-			case 1:
-				vB = rtB - prB;	 // get elapsed counts. Should not overflow/underflow.
-				vB = vB * 1000000 / CPRAD / INT_UPDATE_INTERVAL / 40 * WHEEL_R;
-				prB = rtB;	   // cleanup
+			case 1:				
 				break;
-			case 2:
-				vC = rtC - prC;	 // get elapsed counts. Should not overflow/underflow.
-				vC = vC * 1000000 / CPRAD / INT_UPDATE_INTERVAL / 40 * WHEEL_R;
-				prC = rtC;	   // cleanup
-
-				lCalculator.update();
-				pos_x = -lCalculator.y;
-				pos_y = -lCalculator.x;
-				theta = lCalculator.theta;
-
-
-				if (bController.balanceEnabled() || bController.posCorEnabled()){
-					if (!bController.update()){
-						if (btDebug){
-							BT.println();
-							BT.println("Fell");
-						}
-
-						motorA.move(0);
-						motorB.move(0);
-						motorC.move(0);
-
-						bController.disable();  // disable balancing
-					}
-				}
-				
-				omni.moveCartesian((int)v_x, (int)v_y, 0);							
+			case 2:				
 				break;
 			case 3:
-				if (bController.balanceEnabled()){
-					unsigned long now = micros();
-					if (btDebug){
-						BT.print(now);  										BT.print('\t');
-						BT.print(roll);											BT.print('\t');
-						BT.print(pitch);										BT.print('\t');
-						BT.print(bController.e_theta_x * bController.kp_theta); BT.print('\t');
-						BT.print(bController.e_theta_y * bController.kp_theta); BT.print('\t');	
-						BT.print(bController.int_theta_x);  					BT.print('\t');
-						BT.print(bController.int_theta_y);  					BT.print('\t');
-						BT.print(bController.d_theta_x * bController.kd_theta); BT.print('\t');
-						BT.print(bController.d_theta_y * bController.kd_theta); BT.print('\t');
-						BT.print(v_x);  										BT.print('\t');
-						BT.print(v_y);  										BT.print('\n');
-					}
-					if (serDebug){
-						Serial.print(now);  										Serial.print('\t');
-						Serial.print(roll);											Serial.print('\t');
-						Serial.print(pitch);										Serial.print('\t');
-						Serial.print(bController.e_theta_x * bController.kp_theta);	Serial.print('\t');
-						Serial.print(bController.e_theta_y * bController.kp_theta);	Serial.print('\t');	
-						Serial.print(bController.int_theta_x);  					Serial.print('\t');
-						Serial.print(bController.int_theta_y);  					Serial.print('\t');
-						Serial.print(bController.d_theta_x * bController.kd_theta);	Serial.print('\t');
-						Serial.print(bController.d_theta_y * bController.kd_theta);	Serial.print('\t');
-						Serial.print(v_x);  										Serial.print('\t');
-						Serial.print(v_y);  										Serial.print('\n');
-					}
-				}
-				
 				channelCount = -1;
 				break;
 		}
 		channelCount++;
-	}
-	else if (intMod10 == 1){
-		mpuRead(); // takes long time
-	}
-	else if (intMod10 == 2){
-		
-	}
-	else if (intMod10 == 3){
-		
-	}
-	else if (intMod10 == 4){
-		fusionUpdate();  // takes long time
-
-	}
-	else if (intMod10 == 5){
-		fusionGetEuler(); // inverse trig functions take a long time
-	}
-	else if (intMod10 == 6){
-		
-	}
-	else if (intMod10 == 7){
-		
-	}
-	else if (intMod10 == 8){
-		
-	}
-	else{
-		// motor velocity pid control
-		motorA.move(pA);
-		motorB.move(pB);
-		motorC.move(pC);
 	}
 
 	intUpdateCount++;

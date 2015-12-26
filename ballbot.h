@@ -1,3 +1,25 @@
+/* Program for my ballbot, found at http://onewaytobalance.blogspot.com
+ * 
+ * Program pretty much runs on an interrupt.
+ * Configurations, settings and global variables/objects found in ballbot.h
+ *
+ * Only runs on Teensy 3.x and requires a decent clock (I use 96MHz)
+ * This is because it is quite processing intensive since the single MCU does
+ *    - on board Mahony sensor fusion at >1000Hz using 9dof data from the MPU9250
+ *          --> converting quaternions to Euler angles unfortunately requires CPU intensive 
+ *				inverse trigonometry
+ *    - PID roll/pitch control in 2 dimensions (i.e. two PID control loops for balancing)
+ *    - Polling encoders at a high sample rate (64cpr encoders and a 12400rpm motor - no load)
+ *			--> Finding velocity of each of the 3 wheels
+ *    - Using wheel velocities and trig to obtain absolate location/position of robot
+ *          see http://onewaytobalance.blogspot.com.au/2015/12/omnidirectional-control.html
+ *          The maths requires you to have a basic understanding of linear algebra (matrices etc.)
+ *    - PID control for position of robot
+ *    - Debugging via bluetooth and serial to computer (the RN42 is quite slow)
+ *    
+ *
+ * (C) Brian Chen 2015
+ */
 
 #define BT Serial1
 
@@ -111,7 +133,7 @@
 
 int blinkInterval = BLINK_OK_INTERVAL;
 
-MPU9250 mpu(SPI_CLOCK, SS_PIN);
+MPU9250 mpu(SPI_CLOCK, SS_PIN, BITS_DLPF_CFG_10HZ, BITS_DLPF_CFG_10HZ);
 
 int16_t mag_max[3];
 int16_t mag_min[3];
@@ -126,7 +148,9 @@ PMOTOR motorB(MT_B_PWM, MT_B_DIR, MT_B_BRK, MT_B_FLIP, MT_B_CS);
 PMOTOR motorC(MT_C_PWM, MT_C_DIR, MT_C_BRK, MT_C_FLIP, MT_C_CS);
 
 int32_t pA, pB, pC;
-int32_t motorMinPwr = 12;
+uint32_t mPwrIndex = 0;
+int32_t pA_array[20], pB_array[20], pC_array[20]; // prevent jerkiness
+uint8_t motorMinPwr = 12;
 
 omnidrive omni(&pA, &pB, &pC);
 
@@ -175,6 +199,8 @@ int calibMotorModeAmplitude = 10;
 uint32_t loopCount = 0;
 uint32_t pidUpdateCount = 0;
 
+unsigned long now;
+
 
 void storeBalanceTunings();
 void readBalanceTunings();
@@ -184,6 +210,8 @@ void storeState();
 void readState();
 void storeIMUOffset();
 void readIMUOffset();
+void storeMotorMinPwr();
+void readMotorMinPwr();
 
 void calibMagRoutine();
 void calcMagCalib();
@@ -227,6 +255,18 @@ public:
 	        buffer[0] = ',';
 
 	        switch(command){
+	        	case 'm':
+	        		{
+	        		float my_array[2];
+	        		if (readData(buffer, my_array, 2)){
+	        			bController.setTargPos(pos_x + my_array[0], pos_y + my_array[1]);
+	        			Serial.print(pos_x + my_array[0]);
+	        			Serial.print('\t');
+	        			Serial.print(pos_y + my_array[1]);
+	        			Serial.println();
+	        		}
+	        		}
+	        		break;
 	        	case 'c':
 	        		{
 	        		bcBalanceEnabled = bController.balanceEnabled();
@@ -400,7 +440,7 @@ public:
 						port.print("Set motorMinPwr from ");
 						port.print(motorMinPwr);
 						port.print(" to ");
-						motorMinPwr = (int32_t)my_array[0];
+						motorMinPwr = (uint8_t)my_array[0];
 						port.println(motorMinPwr);
 					}
 
@@ -454,6 +494,10 @@ public:
 						port.println("Stored current state");
 						storeState();
 					}
+					else if (buffer[1] == 'm'){
+						port.println("Stored motor min power");
+						storeMotorMinPwr();
+					}
 					else{
 						// all of it
 						port.println("Stored all of it");
@@ -461,7 +505,8 @@ public:
 						storePosTunings();
 						storeIMUOffset();
 						storeState();
-					}
+						storeMotorMinPwr();
+					} 
 					}
 					break;
 				case 'r':
@@ -486,6 +531,11 @@ public:
 						port.println("Read previous state");
 						readState();
 					}
+					else if (buffer[1] = 'm'){
+						// motor min power
+						port.println("Read motor min power");
+						readMotorMinPwr();
+					}
 					else{
 						// all of it
 						port.println("Read all of it");
@@ -493,6 +543,7 @@ public:
 						readPosTunings();
 						readIMUOffset();
 						readState();
+						readMotorMinPwr();
 					}
 					}
 					break;
@@ -517,19 +568,13 @@ public:
 	void append(char c){
 		outBuffer[outBuffIndex] = c;
 		outBuffIndex++;
-		// if (outBuffIndex == outBuffSize){
-		// 	// out of bounds. We can either clear the buffer or shift it down
-		// 	// for now shift it down
-		// 	ARRAYSHIFTDOWN(outBuffer, 0, outBuffSize-1);
-		// 	outBuffIndex = outBuffSize-1;
-		// }
+
 		if (outBuffIndex == outBuffSize){
 			outBuffIndex = 0;
 		}
 	}
 
 	void send(){
-		// port.write(outBuffer, outBuffIndex);
 		for (int i = 0; i < outBuffIndex; i++){
 			port.print(outBuffer[i]);
 			delayMicroseconds(10);
@@ -537,12 +582,46 @@ public:
 		outBuffIndex = 0;
 	}
 
-	using Print::write;   // inherit Print (see core)
+	using Print::write;   // inherit Print (see core libraries)
 
 	size_t write(uint8_t b){
 		append((char)b);
 		// port.print(b);
 		return 1;
+	}
+
+	void debug(){
+		print(now);  										print('\t');
+		print(roll);											print('\t');
+		print(pitch);										print('\t');
+		print(bController.e_theta_x * bController.kp_theta);	print('\t');
+		print(bController.e_theta_y * bController.kp_theta);	print('\t');	
+		print(bController.int_theta_x);  					print('\t');
+		print(bController.int_theta_y);  					print('\t');
+		print(bController.d_theta_x * bController.kd_theta);	print('\t');
+		print(bController.d_theta_y * bController.kd_theta);	print('\t');
+
+		print(bController.e_dtheta_x * bController.kp_dtheta); print('\t');
+		print(bController.e_dtheta_y * bController.kp_dtheta); print('\t');	
+		print(bController.int_dtheta_x);  					print('\t');
+		print(bController.int_dtheta_y);  					print('\t');
+		print(bController.d_dtheta_x * bController.kd_dtheta); print('\t');
+		print(bController.d_dtheta_y * bController.kd_dtheta); print('\t');
+
+		print(bController.e_pos_x * bController.kp_pos); print('\t');
+		print(bController.e_pos_y * bController.kp_pos); print('\t');	
+		print(bController.int_pos_x);  					print('\t');
+		print(bController.int_pos_y);  					print('\t');
+		print(bController.d_pos_x * bController.kd_pos); print('\t');
+		print(bController.d_pos_y * bController.kd_pos); print('\t');
+		
+		print(v_x);  										print('\t');
+		print(v_y);											print('\t');
+		print(pA);											print('\t');
+		print(pB);											print('\t');
+		print(pC);											print('\t');
+		print(pos_x);  										print('\t');
+		println(pos_y);
 	}
 private:
 	Stream &port;
@@ -736,6 +815,14 @@ void readMagCalib(){
 	Serial.println("Read Mag Calib");
 	Serial.print("mag_bias ");   PRINTARRAY(mag_bias);
 	Serial.print("mag_scalar "); PRINTARRAY(mag_scalar);
+}
+
+void storeMotorMinPwr(){
+	EEPROM_writeAnything(265, motorMinPwr);
+}
+
+void readMotorMinPwr(){
+	EEPROM_readAnything(265, motorMinPwr);
 }
 
 

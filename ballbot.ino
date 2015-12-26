@@ -55,35 +55,8 @@ void thingy(){
 extern "C" int main () {
 	SPI.setSCK(SCK_PIN);    // change SCK pin from 13 to 14 since 13 also has a useful LED
 	SPI.begin();
+
 	Serial.begin(115200);   // doesn't really matter what we put here (Teensy 3.x serial isn't "real" serial)
-	// WAITFORINPUT();
-	// CLEARSERIAL();
-	// BT.begin(230400);  // RN42 default baud
-	// delay(200);
-	// BT.print("$$$");
-
-	// delay(200);
-	// thingy();
-
-	// BT.println("SU,23");
-	// delay(200);
-	// thingy();
-
-	// BT.println("E");
-	// delay(400);
-	// thingy();
-
-	// BT.println("D");
-	// delay(400);
-	// thingy();
-	
-	// BT.println("---");
-	// BT.begin(230400);
-	// delay(200);
-	// thingy();
-
-	// WAITFORINPUT();
-	// CLEARSERIAL();
 	BT.begin(230400);
 
 	pinMode(INT_PIN, INPUT);
@@ -125,8 +98,8 @@ extern "C" int main () {
 	readIMUOffset();
 
 	bController.setOffset(0, 0, 0, 0, 0, 0);
-	bController.setTipLimit(150);    // limit of velocity component before tip
-	// bController.enablePosCorFlip();  // flip coordinates
+	bController.setTipLimit(255);    // limit of velocity component before tip
+	bController.enablePosCorFlip();  // flip coordinates
 
 	//bController.disableBalance();
 	//bController.disablePosCorrection();
@@ -135,8 +108,14 @@ extern "C" int main () {
 	intService.priority(127);  
 	intService.begin(intServiceRoute, INT_UPDATE_INTERVAL);
 
+	// while(true){
+	// 	if(BT.available() > 0){
+	// 		Serial.print((char)BT.read());
+	// 	}
+	// }
+
 	while(true){
-		unsigned long now = micros();
+		now = micros();
 		elapsedMicros elapsed = 0;
 		int loopCountMod4 = loopCount % 4;
 
@@ -155,7 +134,7 @@ extern "C" int main () {
 
 			if ((bController.balanceEnabled() || bController.posCorEnabled()) && !calibMotorMode){
 				blinkInterval = BLINK_OK_INTERVAL;
-				if (!bController.update()){
+				if (!bController.update() || abs(pA) > 255 || abs(pB) > 255 || abs(pC) > 255){
 					if (btDebug){
 						btCtrl.println("---");
 						btCtrl.println("Fell");
@@ -179,58 +158,11 @@ extern "C" int main () {
 			}
 
 			if ((bController.balanceEnabled() || bController.posCorEnabled()) && !calibMotorMode){
-				if (btDebug && loopCount % 12 == 0){
-					btCtrl.print(now);  										btCtrl.print('\t');
-					// btCtrl.print(pidUpdateCount);								btCtrl.print('\t');
-					btCtrl.print(roll);											btCtrl.print('\t');
-					btCtrl.print(pitch);										btCtrl.print('\t');
-					btCtrl.print(bController.e_theta_x * bController.kp_theta); btCtrl.print('\t');
-					btCtrl.print(bController.e_theta_y * bController.kp_theta); btCtrl.print('\t');	
-					btCtrl.print(bController.int_theta_x);  					btCtrl.print('\t');
-					btCtrl.print(bController.int_theta_y);  					btCtrl.print('\t');
-					btCtrl.print(bController.d_theta_x * bController.kd_theta); btCtrl.print('\t');
-					btCtrl.print(bController.d_theta_y * bController.kd_theta); btCtrl.print('\t');
-
-					btCtrl.print(bController.e_dtheta_x * bController.kp_dtheta); btCtrl.print('\t');
-					btCtrl.print(bController.e_dtheta_y * bController.kp_dtheta); btCtrl.print('\t');	
-					btCtrl.print(bController.int_dtheta_x);  					btCtrl.print('\t');
-					btCtrl.print(bController.int_dtheta_y);  					btCtrl.print('\t');
-					btCtrl.print(bController.d_dtheta_x * bController.kd_dtheta); btCtrl.print('\t');
-					btCtrl.print(bController.d_dtheta_y * bController.kd_dtheta); btCtrl.print('\t');
-
-					btCtrl.print(v_x);  										btCtrl.print('\t');
-					btCtrl.print(v_y);											btCtrl.print('\t');
-					btCtrl.print(pA);											btCtrl.print('\t');
-					btCtrl.print(pB);											btCtrl.print('\t');
-					btCtrl.print(pC);											btCtrl.print('\t');
-					btCtrl.print(pos_x);  										btCtrl.print('\t');
-					btCtrl.println(pos_y);
+				if (btDebug && loopCount % 16 == 0){
+					btCtrl.debug();
 				}
 				if (serDebug){
-					Serial.print(now);  										Serial.print('\t');
-					Serial.print(roll);											Serial.print('\t');
-					Serial.print(pitch);										Serial.print('\t');
-					Serial.print(bController.e_theta_x * bController.kp_theta);	Serial.print('\t');
-					Serial.print(bController.e_theta_y * bController.kp_theta);	Serial.print('\t');	
-					Serial.print(bController.int_theta_x);  					Serial.print('\t');
-					Serial.print(bController.int_theta_y);  					Serial.print('\t');
-					Serial.print(bController.d_theta_x * bController.kd_theta);	Serial.print('\t');
-					Serial.print(bController.d_theta_y * bController.kd_theta);	Serial.print('\t');
-
-					Serial.print(bController.e_dtheta_x * bController.kp_dtheta); Serial.print('\t');
-					Serial.print(bController.e_dtheta_y * bController.kp_dtheta); Serial.print('\t');	
-					Serial.print(bController.int_dtheta_x);  					Serial.print('\t');
-					Serial.print(bController.int_dtheta_y);  					Serial.print('\t');
-					Serial.print(bController.d_dtheta_x * bController.kd_dtheta); Serial.print('\t');
-					Serial.print(bController.d_dtheta_y * bController.kd_dtheta); Serial.print('\t');
-					
-					Serial.print(v_x);  										Serial.print('\t');
-					Serial.print(v_y);											Serial.print('\t');
-					Serial.print(pA);											Serial.print('\t');
-					Serial.print(pB);											Serial.print('\t');
-					Serial.print(pC);											Serial.print('\t');
-					Serial.print(pos_x);  										Serial.print('\t');
-					Serial.println(pos_y);
+					serCtrl.debug();
 				}
 			}
 
@@ -248,13 +180,34 @@ extern "C" int main () {
 					pC = pC + SIGN(pC) * motorMinPwr;
 				}
 			}
+
+			// pA_array[mPwrIndex % 20] = pA;
+			// pB_array[mPwrIndex % 20] = pB;
+			// pC_array[mPwrIndex % 20] = pC;
+
+			// pA = 0;
+			// pB = 0;
+			// pC = 0;
+
+			// for (int i = 0; i < 20; i++){
+			// 	pA += pA_array[i];
+			// 	pB += pB_array[i];
+			// 	pC += pC_array[i];
+			// }
+
+			// pA /= 20;
+			// pB /= 20;
+			// pC /= 20;
+
 			motorA.move(pA);
 			motorB.move(pB);
 			motorC.move(pC);
+
+			mPwrIndex++;
 		}
 
-		serCtrl.update();
-		serCtrl.send();
+		serCtrl.update();  // reads incoming data
+		serCtrl.send();    // sends outgoing data
 		btCtrl.update();
 		btCtrl.send();
 		// delay(1);
@@ -269,7 +222,6 @@ void intServiceRoute(){
 
 	int intMod10 = intUpdateCount % 10;
 	unsigned long blinkMod = intUpdateCount % (int)(blinkInterval*1000/INT_UPDATE_INTERVAL);
-	// unsigned long now = micros();
 
 	if (blinkMod == 0){
 		digitalWriteFast(LED, !digitalReadFast(LED));

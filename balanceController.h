@@ -1,3 +1,9 @@
+/* Library for my ballbot, found at http://onewaytobalance.blogspot.com
+ * 
+ * Open sourced under the MIT License (see LICENSE.txt)
+ * (c) Brian Chen 2015
+ */
+
 #define SIGN(a) (a < 0 ? -1 : 1)
 
 #define SINDEG(a)(sin(a*PI/180))
@@ -16,8 +22,10 @@ public:
 	float d_dtheta_x, d_dtheta_y;
 	float int_dtheta_x, int_dtheta_y;
 
-
 	float kp_pos, ki_pos, kd_pos;
+	float e_pos_x, e_pos_y;
+	float d_pos_x, d_pos_y;
+	float int_pos_x, int_pos_y;
 	
 	BalanceController(float *_v_x, float *_v_y, 
 					  float *_pos_x, float *_pos_y, float *_theta, 
@@ -64,12 +72,67 @@ public:
 		targ_pos_y = _targ_pos_y;
 	}
 
+	void setTargPos(float _targ_pos_x, float _targ_pos_y){
+		targ_pos_x = _targ_pos_x;
+		targ_pos_y = _targ_pos_y;
+	}
+
 	bool update(){
 		unsigned long dt = deltaT;
 		deltaT = 0;
 
 		*v_x = 0;
 		*v_y = 0;
+
+		if (pos_cor){
+			e_pos_x = targ_pos_x - *pos_x;
+			e_pos_y = targ_pos_y - *pos_y;
+
+			e_pos_x = SIGN(e_pos_x) * pow(e_pos_x, 2);
+			e_pos_y = SIGN(e_pos_y) * pow(e_pos_y, 2);
+
+			d_pos_x = (*pos_x - pos_x_prev)*1000000/dt;
+			d_pos_y = (*pos_y - pos_y_prev)*1000000/dt;
+
+			pos_x_prev = *pos_x;
+			pos_y_prev = *pos_y;
+
+			int_pos_x += ki_pos * e_pos_x * dt / 1000000;
+			int_pos_y += ki_pos * e_pos_y * dt / 1000000;
+
+			float v_x_abs = kp_pos * e_pos_x + int_pos_x + kd_pos * d_pos_x;
+			float v_y_abs = kp_pos * e_pos_y + int_pos_y + kd_pos * d_pos_y;
+
+			// note that v_x and v_y are relative to robot. Thus we need to
+			// convert absolute coordinates
+			/*
+			[v_x] = [cos(alpha) -sin(alpha)][v_x_rel]
+			[v_y]   [sin(alpha)  cos(alpha)][v_y_rel]
+			*/
+			float temp_x = COSDEG(-*theta) * v_x_abs - SINDEG(-*theta) * v_y_abs;
+			float temp_y = SINDEG(-*theta) * v_x_abs + COSDEG(-*theta) * v_y_abs;
+
+			if (abs(temp_x) > 255) temp_x = 255  * SIGN(temp_x);
+			if (abs(temp_y) > 255) temp_y = 255  * SIGN(temp_y);
+
+			if (flip_pos_cor){
+				temp_x *= -1;
+				temp_y *= -1;
+			}
+
+			// *v_x += temp_x;
+			// *v_y += temp_y;
+
+			targ_theta_x = temp_x;
+			targ_theta_y = temp_y;
+
+			if (abs(targ_theta_x) > 5){
+				targ_theta_x = SIGN(targ_theta_x) * 5;
+			}
+			if (abs(targ_theta_y) > 5){
+				targ_theta_y = SIGN(targ_theta_y) * 5;
+			}
+		}
 
 		if (balance){
 			d_theta_x = (*p - p_prev)*1000000/dt;
@@ -107,9 +170,9 @@ public:
 			// *v_x += 1;
 			// *v_y += 1;
 
-			*v_x = kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
+			*v_x += kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
 				  + kp_dtheta * e_dtheta_x + int_dtheta_x + kd_dtheta * d_dtheta_x;
-			*v_y = kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
+			*v_y += kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
 			      + kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;
 
 			// *v_x = kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
@@ -118,42 +181,7 @@ public:
 			//       + kp_dtheta * e_dtheta_y;
 		}
 
-		if (pos_cor){
-			e_pos_x = targ_pos_x - *pos_x;
-			e_pos_y = targ_pos_y - *pos_y;
 
-			d_pos_x = (*pos_x - pos_x_prev)/dt;
-			d_pos_y = (*pos_y - pos_y_prev)/dt;
-
-			pos_x_prev = *pos_x;
-			pos_y_prev = *pos_y;
-
-			int_pos_x += ki_pos * e_pos_x * dt;
-			int_pos_y += ki_pos * e_pos_y * dt;
-
-			float v_x_abs = kp_pos * e_pos_x + int_pos_x + kd_pos * d_pos_x;
-			float v_y_abs = kp_pos * e_pos_y + int_pos_y + kd_pos * d_pos_y;
-
-			// note that v_x and v_y are relative to robot. Thus we need to
-			// convert absolute coordinates
-			/*
-			[v_x] = [cos(alpha) -sin(alpha)][v_x_rel]
-			[v_y]   [sin(alpha)  cos(alpha)][v_y_rel]
-			*/
-			float temp_x = COSDEG(-*theta) * v_x_abs - SINDEG(-*theta) * v_y_abs;
-			float temp_y = SINDEG(-*theta) * v_x_abs + COSDEG(-*theta) * v_y_abs;
-
-			if (abs(temp_x) > 50) temp_x = 50  * SIGN(temp_x);
-			if (abs(temp_y) > 50) temp_y = 50  * SIGN(temp_y);
-
-			if (flip_pos_cor){
-				temp_x *= -1;
-				temp_y *= -1;
-			}
-
-			*v_x += temp_x;
-			*v_y += temp_y;
-		}
 
 		if (abs(*v_x) > tip_limit || abs(*v_y) > tip_limit){
 			if (abs(*v_x) > tip_limit) *v_x = tip_limit * SIGN(*v_x);
@@ -187,6 +215,13 @@ public:
 
 		int_theta_x = 0;
 		int_theta_y = 0;
+
+		int_dtheta_x = 0;
+		int_dtheta_y = 0;
+
+		int_pos_x = 0;
+		int_pos_y = 0;
+
 
 		*v_x = 0;
 		*v_y = 0;
@@ -250,8 +285,6 @@ private:
 	bool pos_cor = true;
 	bool flip_pos_cor = false;
 
-	float e_pos_x, e_pos_y;
-	float d_pos_x, d_pos_y;
-	float int_pos_x, int_pos_y;
+	
 	float targ_pos_x, targ_pos_y;
 };

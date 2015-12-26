@@ -1,4 +1,8 @@
-
+/* Library for my ballbot, found at http://onewaytobalance.blogspot.com
+ * 
+ * Open sourced under the MIT License (see LICENSE.txt)
+ * (c) Brian Chen 2015
+ */
 
 /*
 

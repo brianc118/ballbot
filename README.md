@@ -2,12 +2,12 @@
 WORK IN PROGRESS
 
 Dependencies:
-	EEPROMAnything     // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
-	MPU9250.h          // see https://github.com/brianchen118/MPU9250
-	pwmMotor.h         // see https://github.com/brianchen118/Team-PI-Lib/tree/master/pwmMotor
-	fastTrig.h		   // see https://github.com/brianchen118/fastTrig
-	omnidrive.h		   // see https://github.com/brianchen118/omnidrive
-	sensorfusion.h     // see https://github.com/brianchen118/sensorfusion
+- EEPROMAnything     // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
+- MPU9250.h          // see https://github.com/brianchen118/MPU9250
+- pwmMotor.h         // see https://github.com/brianchen118/Team-PI-Lib/tree/master/pwmMotor
+- fastTrig.h		 // see https://github.com/brianchen118/fastTrig
+- omnidrive.h		 // see https://github.com/brianchen118/omnidrive
+- sensorfusion.h     // see https://github.com/brianchen118/sensorfusion
 
 Hardware specs:
 - 3x Maxon DCX22s motors with ENX16 Easy 64CPR encoders

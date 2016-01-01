@@ -1,7 +1,7 @@
 # Code for a self balancing ballbot
 WORK IN PROGRESS
 
-Dependencies:
+Dependencies (other custom libraries needed):
 - EEPROMAnything     // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
 - MPU9250.h          // see https://github.com/brianchen118/MPU9250
 - pwmMotor.h         // see https://github.com/brianchen118/Team-PI-Lib/tree/master/pwmMotor

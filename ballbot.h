@@ -642,7 +642,7 @@ private:
 SerialController btCtrl(BT);
 SerialController serCtrl(Serial);
 
-void storeBalanceTunings(){
+static void storeBalanceTunings(){
 	EEPROM_writeAnything(200, bController.kp_theta);
 	EEPROM_writeAnything(204, bController.ki_theta);
 	EEPROM_writeAnything(208, bController.kd_theta);
@@ -651,7 +651,7 @@ void storeBalanceTunings(){
 	EEPROM_writeAnything(260, bController.kd_dtheta);
 }
 
-void readBalanceTunings(){
+static void readBalanceTunings(){
 	float _kp_theta, _ki_theta, _kd_theta;
 	float _kp_dtheta, _ki_dtheta, _kd_dtheta;
 	EEPROM_readAnything(200, _kp_theta);
@@ -673,12 +673,12 @@ void readBalanceTunings(){
 	);
 }
 
-void storePosTunings(){
+static void storePosTunings(){
 	EEPROM_writeAnything(212, bController.kp_pos);
 	EEPROM_writeAnything(216, bController.ki_pos);
 	EEPROM_writeAnything(220, bController.kd_pos);
 }
-void readPosTunings(){
+static void readPosTunings(){
 	float _kp_pos, _ki_pos, _kd_pos;
 	EEPROM_readAnything(212, _kp_pos);
 	EEPROM_readAnything(216, _ki_pos);
@@ -696,7 +696,7 @@ void readPosTunings(){
 	);
 }
 
-void storeState(){
+static void storeState(){
 	bool bcBalanceEnabled = bController.balanceEnabled();
 	bool bcPosCorEnabled = bController.posCorEnabled();
 	EEPROM_writeAnything(224, bcBalanceEnabled);
@@ -705,7 +705,7 @@ void storeState(){
 	EEPROM_writeAnything(236, serDebug);
 	EEPROM_writeAnything(240, btDebug);
 }
-void readState(){
+static void readState(){
 	bool bcBalanceEnabled, bcPosCorEnabled;
 	EEPROM_readAnything(224, bcBalanceEnabled);
 	EEPROM_readAnything(228, bcPosCorEnabled);
@@ -729,11 +729,11 @@ void readState(){
 		}
 	}
 }
-void storeIMUOffset(){
+static void storeIMUOffset(){
 	EEPROM_writeAnything(244, roll_offset);
 	EEPROM_writeAnything(248, pitch_offset);
 }
-void readIMUOffset(){
+static void readIMUOffset(){
 	EEPROM_readAnything(244, roll_offset);
 	EEPROM_readAnything(248, pitch_offset);
 }
@@ -792,7 +792,7 @@ void calcMagCalib(){
 	mag_scalar[2] = avg_rad/((float)mag_scale[2]);
 }
 
-void storeMagCalib(){
+static void storeMagCalib(){
 	int i = 0;
 	for (; i < 3; i++){
 		EEPROM_writeAnything(100 + 4*i, mag_max[i]);
@@ -802,7 +802,7 @@ void storeMagCalib(){
 	}
 }
 
-void readMagCalib(){
+static void readMagCalib(){
 	int i = 0;
 	for (; i < 3; i++){
 		EEPROM_readAnything(100 + 4*i, mag_max[i]);
@@ -817,11 +817,11 @@ void readMagCalib(){
 	Serial.print("mag_scalar "); PRINTARRAY(mag_scalar);
 }
 
-void storeMotorMinPwr(){
+static void storeMotorMinPwr(){
 	EEPROM_writeAnything(265, motorMinPwr);
 }
 
-void readMotorMinPwr(){
+static void readMotorMinPwr(){
 	EEPROM_readAnything(265, motorMinPwr);
 }
 
@@ -883,7 +883,7 @@ inline void encoderPoll(){
 
 	encIndex = encState | (lEncState << 2);
 
-	/* byte   4	3	2	1
+	/* byte   4	   3	2	1
 			  lB   lA   B	A */
 
 

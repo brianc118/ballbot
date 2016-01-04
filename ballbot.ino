@@ -41,17 +41,6 @@
  *
  */
 
-void thingy(){
-	if (BT.available()){
- 		while(BT.available()){
-	 		Serial.print((char)BT.read());
-	 	}
- 	}
- 	else{
- 		Serial.println("none");
- 	}
-}
-
 extern "C" int main () {
 	SPI.setSCK(SCK_PIN);    // change SCK pin from 13 to 14 since 13 also has a useful LED
 	SPI.begin();
@@ -108,11 +97,6 @@ extern "C" int main () {
 	intService.priority(127);  
 	intService.begin(intServiceRoute, INT_UPDATE_INTERVAL);
 
-	// while(true){
-	// 	if(BT.available() > 0){
-	// 		Serial.print((char)BT.read());
-	// 	}
-	// }
 
 	while(true){
 		now = micros();
@@ -161,7 +145,7 @@ extern "C" int main () {
 				if (btDebug && loopCount % 16 == 0){
 					btCtrl.debug();
 				}
-				if (serDebug){
+				if (serDebug && loopCount % 1 == 0){
 					serCtrl.debug();
 				}
 			}
@@ -180,24 +164,6 @@ extern "C" int main () {
 					pC = pC + SIGN(pC) * motorMinPwr;
 				}
 			}
-
-			// pA_array[mPwrIndex % 20] = pA;
-			// pB_array[mPwrIndex % 20] = pB;
-			// pC_array[mPwrIndex % 20] = pC;
-
-			// pA = 0;
-			// pB = 0;
-			// pC = 0;
-
-			// for (int i = 0; i < 20; i++){
-			// 	pA += pA_array[i];
-			// 	pB += pB_array[i];
-			// 	pC += pC_array[i];
-			// }
-
-			// pA /= 20;
-			// pB /= 20;
-			// pC /= 20;
 
 			motorA.move(pA);
 			motorB.move(pB);

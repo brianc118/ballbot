@@ -23,19 +23,58 @@
 
 #include <SPI.h>
 #include <EEPROM.h>
-#include <FrequencyTimer2.h>  // Built into teensy core
+#include <FrequencyTimer2.h>   // Built into teensy core
 
 /* own libraries */
-#include <EEPROMAnything.h>   // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
-#include <MPU9250.h>          // see https://github.com/brianchen118/MPU9250
-#include <pwmMotor.h>         // see https://github.com/brianchen118/Team-PI-Lib/tree/master/pwmMotor
+#include <EEPROMAnything.h>    // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
+#include <MPU9250.h>           // see https://github.com/brianchen118/MPU9250
+#include <pwmMotor.h>          // see https://github.com/brianchen118/Team-PI-Lib/tree/master/pwmMotor
 #include <fastTrig.h>          // https://github.com/brianchen118/fastTrig
-#include <omnidrive.h>          // see https://github.com/brianchen118/omnidrive
-#include <sensorfusion.h>     // see https://github.com/brianchen118/sensorfusion
+#include <omnidrive.h>         // see https://github.com/brianchen118/omnidrive
+#include <sensorfusion.h>      // see https://github.com/brianchen118/sensorfusion
+#include <PID_v1.h>
 #include "balanceController.h"
 #include "locationCalculator.h"
 #include "ballbot.h"
 
+#define POS_LPF_T 200.0f
+elapsedMicros posLPF_dt;
+
+float pos_x_arr[20];
+float pos_y_arr[20];
+
+#define BAUD_9600 0
+#define BAUD_115200 1
+#define BAUD_230400 2
+#define BAUD_460800 3
+#define BAUD_921600 4
+#define BAUD_1382400 5
+
+#define RN42 0
+#define HC06 1
+
+void btSetup(uint8_t module, int initBaud, int finalBaud){
+    if (module == 0){
+
+    }
+    else if (module == 1){
+        BT.begin(initBaud);
+        delay(100);
+        Serial.print("AT");
+        BT.println("AT");
+
+        delay(1000);
+
+        switch (finalBaud){
+            case 0: BT.print("AT+BAUD4"); delay(500); BT.begin(9600);   break;
+            case 1: BT.print("AT+BAUD8"); delay(500); BT.begin(115200); break;
+            case 2: BT.print("AT+BAUD9"); delay(500); BT.begin(230400); break;
+            case 3: BT.print("AT+BAUDA"); delay(500); BT.begin(460800); break;
+            case 4: BT.print("AT+BAUDB"); delay(500); BT.begin(921600); break;
+            case 5: BT.print("AT+BAUDC"); delay(500); BT.begin(1382400); break;
+        }
+    }
+}
 
 /* Main part of the program begins here.
  *
@@ -46,7 +85,12 @@ extern "C" int main () {
     SPI.begin();
 
     Serial.begin(115200);   // doesn't really matter what we put here (Teensy 3.x serial isn't "real" serial)
-    BT.begin(230400);
+
+    btSetup(HC06, 921600, BAUD_1382400);   
+    // while (true){
+    //     bluetoothEcho();
+    // }
+    // BT.begin(115200);
 
     pinMode(INT_PIN, INPUT);
     pinMode(LED, OUTPUT);    digitalWriteFast(LED, HIGH);   // initial set LEDs on high
@@ -56,6 +100,18 @@ extern "C" int main () {
     motorA.begin(PWM_FREQ);  
     motorB.begin(PWM_FREQ);
     motorC.begin(PWM_FREQ);
+
+    pidMtrA.SetOutputLimits(-2550000, 2550000);
+    pidMtrB.SetOutputLimits(-2550000, 2550000);
+    pidMtrC.SetOutputLimits(-2550000, 2550000);
+
+    pidMtrA.SetSampleTime(1);
+    pidMtrB.SetSampleTime(1);
+    pidMtrC.SetSampleTime(1);
+
+    pidMtrA.SetMode(AUTOMATIC);
+    pidMtrB.SetMode(AUTOMATIC);
+    pidMtrC.SetMode(AUTOMATIC);
 
     pinMode(ENCXA, INPUT);  pinMode(ENCYA, INPUT);  pinMode(ENCZA, INPUT);
     pinMode(ENCXB, INPUT);  pinMode(ENCYB, INPUT);  pinMode(ENCZB, INPUT);
@@ -86,6 +142,11 @@ extern "C" int main () {
     readState();
     readIMUOffset();
 
+    mpuRead(); // takes long time
+    fusionUpdate();  // takes long time
+    fusionGetEuler();
+    zeroImu();
+
     bController.setOffset(0, 0, 0, 0, 0, 0);
     bController.setTipLimit(255);    // limit of velocity component before tip
     bController.enablePosCorFlip();  // flip coordinates
@@ -97,23 +158,44 @@ extern "C" int main () {
     intService.priority(127);  
     intService.begin(intServiceRoute, INT_UPDATE_INTERVAL);
 
+    // vA_targ = 300;
+    // vB_targ = 300;
+    // vC_targ = 300;
 
     while(true){
         now = micros();
-        elapsedMicros elapsed = 0;
         int loopCountMod4 = loopCount % 4;
 
         mpuRead(); // takes long time
         fusionUpdate();  // takes long time
         
         if (loopCountMod4 == 0){
-            elapsed = 0;
             fusionGetEuler(); // inverse trig functions take a long time
 
             encoderGetVelocity();  // need to first get velocity of wheels before getting pos.
             lCalculator.update();
-            pos_x = -lCalculator.y;
-            pos_y = -lCalculator.x;
+            // pos_x = -lCalculator.y;
+            // pos_y = -lCalculator.x;
+
+            // low pass filter implementation on position (smooths out derivative term)
+            unsigned long dt = posLPF_dt;
+            posLPF_dt = 0;
+            float aa = POS_LPF_T/(float)(POS_LPF_T + dt);
+            pos_x = aa * (-lCalculator.y) + (1 - aa) * pos_x;
+            pos_y = aa * (-lCalculator.x) + (1 - aa) * pos_y;
+
+            // moving average filter
+            // ARRAYSHIFTDOWN(pos_x_arr, 0, 19);
+            // ARRAYSHIFTDOWN(pos_y_arr, 0, 19);
+
+            // pos_x_arr[0] = pos_x;
+            // pos_y_arr[0] = pos_y;
+
+            // ARRAYAVERAGE(pos_x_arr, pos_x);
+            // ARRAYAVERAGE(pos_y_arr, pos_y);
+
+            // PRINTARRAY(pos_x_arr);
+
             theta = lCalculator.theta;
 
             if ((bController.balanceEnabled() || bController.posCorEnabled()) && !calibMotorMode){
@@ -139,10 +221,16 @@ extern "C" int main () {
             }
             else{
                 omni.moveCartesian((int)v_x, (int)v_y, 0);
+
+                if (motorPidControl){
+                    vA_targ *= 10;
+                    vB_targ *= 10;
+                    vC_targ *= 10;  
+                }                
             }
 
             if ((bController.balanceEnabled() || bController.posCorEnabled()) && !calibMotorMode){
-                if (btDebug && loopCount % 16 == 0){
+                if (btDebug && loopCount % 1 == 0){
                     btCtrl.debug();
                 }
                 if (serDebug && loopCount % 1 == 0){
@@ -153,25 +241,50 @@ extern "C" int main () {
         }
         else if (loopCountMod4 == 1){
             // motor velocity pid control
-            if (!calibMotorMode){
-                if (abs(pA) > 0){
-                    pA = pA + SIGN(pA) * motorMinPwr;
-                }
-                if (abs(pB) > 0){
-                    pB = pB + SIGN(pB) * motorMinPwr;
-                }
-                if (abs(pC) > 0){
-                    pC = pC + SIGN(pC) * motorMinPwr;
+            if (motorPidControl){               
+
+                pidMtrA.Compute();
+                pidMtrB.Compute();
+                pidMtrC.Compute();
+
+                unsigned long elapsed = pidMtrdt;
+                pidMtrdt = 0;
+
+                pA_f += pidOutA * elapsed / 1000000;
+                pB_f += pidOutB * elapsed / 1000000;
+                pC_f += pidOutC * elapsed / 1000000;
+
+                pA = (int)pA_f;
+                pB = (int)pB_f;
+                pC = (int)pC_f;
+
+                if (abs(pA) > 255) pA = SIGN(pA) * 255;
+                if (abs(pB) > 255) pB = SIGN(pB) * 255;
+                if (abs(pC) > 255) pC = SIGN(pC) * 255;
+            }
+            else{
+                pA = (int)vA_targ;
+                pB = (int)vB_targ;
+                pC = (int)vC_targ;
+
+                if (!calibMotorMode){
+                    if (abs(pA) > 0){
+                        pA = pA + SIGN(pA) * motorMinPwr;
+                    }
+                    if (abs(pB) > 0){
+                        pB = pB + SIGN(pB) * motorMinPwr;
+                    }
+                    if (abs(pC) > 0){
+                        pC = pC + SIGN(pC) * motorMinPwr;
+                    }
                 }
             }
 
             motorA.move(pA);
             motorB.move(pB);
             motorC.move(pC);
-
-            mPwrIndex++;
         }
-
+        
         serCtrl.update();  // reads incoming data
         serCtrl.send();    // sends outgoing data
         btCtrl.update();
@@ -189,17 +302,27 @@ void intServiceRoute(){
     int intMod10 = intUpdateCount % 10;
     unsigned long blinkMod = intUpdateCount % (int)(blinkInterval*1000/INT_UPDATE_INTERVAL);
 
+    // blinking
     if (blinkMod == 0){
         digitalWriteFast(LED, !digitalReadFast(LED));
     }
 
+    // int motorChangeInterval = 5000;
+    // unsigned long motorMod = intUpdateCount % (int)(motorChangeInterval*1000/INT_UPDATE_INTERVAL);
+
+    // if (motorMod == 0){
+    //     vA_targ *= -1;
+    //     vB_targ *= -1;
+    //     vC_targ *= -1;
+    // }
+
     if (intMod10 == 0){
         switch(channelCount){
-            case 0:                
+            case 0:
                 break;
-            case 1:                
+            case 1:
                 break;
-            case 2:                
+            case 2:
                 break;
             case 3:
                 channelCount = -1;

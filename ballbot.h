@@ -110,10 +110,10 @@
             *(a + q + 1) = *(a + q); }}}          \
 
 #define ARRAYAVERAGE(a, out){                         \
-    int average = 0;                                  \
+    float sum = 0;                                  \
     for (int i = 0; i < sizeof(a)/sizeof(a[0]); i++){ \
-        average += a[i];}                             \
-    out = average/(sizeof(a)/sizeof(a[0]));}          \
+        sum += a[i];}                             \
+    out = sum/(sizeof(a)/sizeof(a[0]));}          \
 
 #define CLEARARRAY(a){                                \
     for (int q = 0; q < sizeof(a)/sizeof(a[0]); q++){ \
@@ -143,24 +143,13 @@ float roll_offset, pitch_offset;
 
 float mag_scalar[3], mag_bias[3];
 
-PMOTOR motorA(MT_A_PWM, MT_A_DIR, MT_A_BRK, MT_A_FLIP, MT_A_CS);
-PMOTOR motorB(MT_B_PWM, MT_B_DIR, MT_B_BRK, MT_B_FLIP, MT_B_CS);
-PMOTOR motorC(MT_C_PWM, MT_C_DIR, MT_C_BRK, MT_C_FLIP, MT_C_CS);
-
-int32_t pA, pB, pC;
-uint32_t mPwrIndex = 0;
-int32_t pA_array[20], pB_array[20], pC_array[20]; // prevent jerkiness
-uint8_t motorMinPwr = 12;
-
-omnidrive omni(&pA, &pB, &pC);
-
 IntervalTimer intService;
 /* since there are 4 phases a quadrature encoder goes through, there are 16 combinations, many of which
    are invalid (and hence = 0) */
 const int32_t enc_TAB[]= { 0, 1, -1, 0,
-                           -1, 0,  0, 1,
-                            1, 0,  0,-1,
-                            0,-1,  1, 0 };
+                          -1, 0,  0, 1,
+                           1, 0,  0,-1,
+                           0,-1,  1, 0 };
 
 volatile uint32_t encState = 0, lEncState = 0;
 volatile uint32_t encIndex;
@@ -176,7 +165,28 @@ float tA = 0, tB = 0, tC = 0, tD = 0;   // wheel angle
 
 elapsedMicros encUpdateDt;
 
-volatile float vA_targ, vB_targ, vC_targ, vD_targ; // target angular velocity
+float vA_targ, vB_targ, vC_targ, vD_targ; // target angular velocity
+
+PMOTOR motorA(MT_A_PWM, MT_A_DIR, MT_A_BRK, MT_A_FLIP, MT_A_CS);
+PMOTOR motorB(MT_B_PWM, MT_B_DIR, MT_B_BRK, MT_B_FLIP, MT_B_CS);
+PMOTOR motorC(MT_C_PWM, MT_C_DIR, MT_C_BRK, MT_C_FLIP, MT_C_CS);
+
+int32_t pA, pB, pC;
+float pA_f, pB_f, pC_f;
+float pidOutA, pidOutB, pidOutC;
+uint8_t motorMinPwr = 12;
+
+bool motorPidControl = false;
+
+float mtrKp = 6, mtrKi, mtrKd = 0.04;
+PID pidMtrA(&vA, &pidOutA, &vA_targ, mtrKp, mtrKi, mtrKd, REVERSE);
+PID pidMtrB(&vB, &pidOutB, &vB_targ, mtrKp, mtrKi, mtrKd, REVERSE);
+PID pidMtrC(&vC, &pidOutC, &vC_targ, mtrKp, mtrKi, mtrKd, REVERSE);
+
+elapsedMicros pidMtrdt;
+
+// omnidrive omni(&pA, &pB, &pC);
+omnidrive omni(&vA_targ, &vB_targ, &vC_targ);
 
 elapsedMicros readIMUdt;
 elapsedMicros readMagDt;
@@ -210,6 +220,7 @@ static void storeState();
 static void readState();
 static void storeIMUOffset();
 static void readIMUOffset();
+void zeroImu();
 static void storeMotorMinPwr();
 static void readMotorMinPwr();
 
@@ -267,6 +278,14 @@ public:
                     }
                     }
                     break;
+                case 'f':
+                    {
+                    if (buffer[1] == 'e')
+                        bController.enablePosCorFlip();
+                    else if (buffer[1] == 'd')
+                        bController.disablePosCorFlip();
+                    }
+                    break;
                 case 'c':
                     {
                     bcBalanceEnabled = bController.balanceEnabled();
@@ -294,6 +313,8 @@ public:
                     port.print(bController.posCorEnabled());    port.print(", ");
                     port.print("calibMotorMode = ");
                     port.print(calibMotorMode);                    port.print(", ");
+                    port.print("min motor power = ");        port.print(", ");
+                    port.print(motorMinPwr);
                     port.print("blinkInterval = ");
                     port.print(blinkInterval);
                     port.print(" (");
@@ -454,8 +475,7 @@ public:
                     bcPosCorEnabled = bController.posCorEnabled();
 
                     if (buffer[1] == 'i'){
-                        roll_offset = roll + roll_offset;
-                        pitch_offset = pitch + pitch_offset;
+                        zeroImu();
                         port.print("Zeroed at r = ");
                         port.print(roll_offset);
                         port.print(" p = ");
@@ -531,7 +551,7 @@ public:
                         port.println("Read previous state");
                         readState();
                     }
-                    else if (buffer[1] = 'm'){
+                    else if (buffer[1] == 'm'){
                         // motor min power
                         port.println("Read motor min power");
                         readMotorMinPwr();
@@ -601,12 +621,18 @@ public:
         print(bController.d_theta_x * bController.kd_theta);    print('\t');
         print(bController.d_theta_y * bController.kd_theta);    print('\t');
 
-        print(bController.e_dtheta_x * bController.kp_dtheta); print('\t');
-        print(bController.e_dtheta_y * bController.kp_dtheta); print('\t');    
-        print(bController.int_dtheta_x);                       print('\t');
-        print(bController.int_dtheta_y);                       print('\t');
-        print(bController.d_dtheta_x * bController.kd_dtheta); print('\t');
-        print(bController.d_dtheta_y * bController.kd_dtheta); print('\t');
+        // print(bController.e_dtheta_x * bController.kp_dtheta); print('\t');
+        // print(bController.e_dtheta_y * bController.kp_dtheta); print('\t');    
+        // print(bController.int_dtheta_x);                       print('\t');
+        // print(bController.int_dtheta_y);                       print('\t');
+        // print(bController.d_dtheta_x * bController.kd_dtheta); print('\t');
+        // print(bController.d_dtheta_y * bController.kd_dtheta); print('\t');
+        print(vA); print('\t');
+        print(vA_targ); print('\t');    
+        print(vB); print('\t');
+        print(vB_targ); print('\t');
+        print(vC); print('\t');
+        print(vC_targ); print('\t');
 
         print(bController.e_pos_x * bController.kp_pos); print('\t');
         print(bController.e_pos_y * bController.kp_pos); print('\t');    
@@ -626,7 +652,7 @@ public:
 private:
     Stream &port;
     /* reading */
-    char buffer [32];
+    char buffer [64];
     int cnt = 0;
     bool ready = false;
 
@@ -736,6 +762,11 @@ static void storeIMUOffset(){
 static void readIMUOffset(){
     EEPROM_readAnything(244, roll_offset);
     EEPROM_readAnything(248, pitch_offset);
+}
+
+void zeroImu(){
+    roll_offset = roll + roll_offset;
+    pitch_offset = pitch + pitch_offset;
 }
 
 /* Magnetometer calibration stuff

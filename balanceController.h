@@ -100,8 +100,11 @@ public:
             int_pos_x += ki_pos * e_pos_x * dt / 1000000;
             int_pos_y += ki_pos * e_pos_y * dt / 1000000;
 
-            float v_x_abs = kp_pos * e_pos_x + int_pos_x + kd_pos * d_pos_x;
-            float v_y_abs = kp_pos * e_pos_y + int_pos_y + kd_pos * d_pos_y;
+            if (int_pos_x > 10) int_pos_x = 10 * SIGN(int_pos_x);
+            if (int_pos_y > 10) int_pos_y = 10 * SIGN(int_pos_y);
+
+            float v_x_abs = kp_pos * e_pos_x + int_pos_x - kd_pos * d_pos_x;
+            float v_y_abs = kp_pos * e_pos_y + int_pos_y - kd_pos * d_pos_y;
 
             // note that v_x and v_y are relative to robot. Thus we need to
             // convert absolute coordinates
@@ -112,25 +115,27 @@ public:
             float temp_x = COSDEG(-*theta) * v_x_abs - SINDEG(-*theta) * v_y_abs;
             float temp_y = SINDEG(-*theta) * v_x_abs + COSDEG(-*theta) * v_y_abs;
 
-            if (abs(temp_x) > 255) temp_x = 255  * SIGN(temp_x);
-            if (abs(temp_y) > 255) temp_y = 255  * SIGN(temp_y);
-
             if (flip_pos_cor){
                 temp_x *= -1;
                 temp_y *= -1;
             }
 
-            // *v_x += temp_x;
-            // *v_y += temp_y;
+            if (pos_cor_angular_mode){
+            	targ_theta_x = temp_x;
+	            targ_theta_y = temp_y;
 
-            targ_theta_x = temp_x;
-            targ_theta_y = temp_y;
-
-            if (abs(targ_theta_x) > 5){
-                targ_theta_x = SIGN(targ_theta_x) * 5;
+	            if (abs(targ_theta_x) > 15){
+	                targ_theta_x = SIGN(targ_theta_x) * 15;
+	            }
+	            if (abs(targ_theta_y) > 15){
+	                targ_theta_y = SIGN(targ_theta_y) * 15;
+	            }
             }
-            if (abs(targ_theta_y) > 5){
-                targ_theta_y = SIGN(targ_theta_y) * 5;
+            else{
+            	if (abs(temp_x) > 255) temp_x = 255  * SIGN(temp_x);
+            	if (abs(temp_y) > 255) temp_y = 255  * SIGN(temp_y);
+            	*v_x += temp_x;
+            	*v_y += temp_y;
             }
         }
 
@@ -147,12 +152,6 @@ public:
             int_theta_x += ki_theta * e_theta_x * dt / 1000000;
             int_theta_y += ki_theta * e_theta_y * dt / 1000000;
 
-
-
-            // doesn't work well (at least with first try)
-            // targ_theta_x -= int_theta_x * 0.0001;
-            // targ_theta_y -= int_theta_y * 0.0001;
-
             d_dtheta_x = (d_theta_x - d_theta_x_prev)*1000000/dt;
             d_dtheta_y = (d_theta_y - d_theta_y_prev)*1000000/dt;
 
@@ -165,23 +164,11 @@ public:
             int_dtheta_x += ki_dtheta * e_dtheta_x * dt / 1000000;
             int_dtheta_y += ki_dtheta * e_dtheta_y * dt / 1000000;
 
-            // *v_x += kp_dtheta * e_dtheta_x + int_dtheta_x + kd_dtheta * d_dtheta_x;
-            // *v_y += kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;
-            // *v_x += 1;
-            // *v_y += 1;
-
             *v_x += kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
                   + kp_dtheta * e_dtheta_x + int_dtheta_x + kd_dtheta * d_dtheta_x;
             *v_y += kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
-                  + kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;
-
-            // *v_x = kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
-            //       + kp_dtheta * e_dtheta_x;
-            // *v_y = kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
-            //       + kp_dtheta * e_dtheta_y;
+                  + kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;	            
         }
-
-
 
         if (abs(*v_x) > tip_limit || abs(*v_y) > tip_limit){
             if (abs(*v_x) > tip_limit) *v_x = tip_limit * SIGN(*v_x);
@@ -240,9 +227,6 @@ public:
     void disablePosCorFlip(){
         flip_pos_cor = false;
     }
-    void setBalanceMode(bool mode){
-        balanceModeDerivative = mode;
-    }
     void disable(){
         disableBalance();
         disablePosCorrection();
@@ -274,7 +258,6 @@ private:
 
     /* balancing var */
     bool balance = true;
-    bool balanceModeDerivative = false;
     
     float targ_theta_x, targ_theta_y;
 
@@ -283,6 +266,7 @@ private:
 
     /* pos correction */
     bool pos_cor = true;
+    bool pos_cor_angular_mode = true;
     bool flip_pos_cor = false;
 
     

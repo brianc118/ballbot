@@ -65,10 +65,10 @@ public:
 
         det = (c_c*s_a - c_b*s_a + c_a*s_b - c_c*s_b + c_b*s_c - c_a*s_c);
     }
-    void update(unsigned long _dt){
+    void update(unsigned long _dt, float rot){
         v_x_rel = (c_b - c_c) * (*v_a) 
-                   + (c_c - c_a) * (*v_b) 
-                   + (c_a - c_b) * (*v_c);
+                + (c_c - c_a) * (*v_b) 
+                + (c_a - c_b) * (*v_c);
 
         v_x_rel /= det;
 
@@ -78,35 +78,28 @@ public:
 
         v_y_rel /= det;
 
-        w = (c_b*s_c - c_c*s_b) * (*v_a)
-          + (c_c*s_a - c_a*s_c) * (*v_b)
-          + (c_a*s_b - c_b*s_a) * (*v_c);
-
-        w = w / det / R;  // in rad
-        w = w * 180 / PI; // in deg
-
-        // linear equations solved. Now integrate.
-        
-        theta += w * _dt / 1000000;
-        if (theta >= 360) theta -= 360;
-
-        average_theta = theta - w * _dt / 1000000 / 2;
-        alpha = -average_theta;
-
         // first transform velocities to real coordinates.
-        v_x = COSDEG(alpha) * v_x_rel - SINDEG(alpha) * v_y_rel;
-        v_y = SINDEG(alpha) * v_x_rel + COSDEG(alpha) * v_y_rel;
+        v_x = COSDEG(rot) * v_x_rel - SINDEG(rot) * v_y_rel;
+        v_y = SINDEG(rot) * v_x_rel + COSDEG(rot) * v_y_rel;
 
         // now integrate
         x += v_x * _dt / 1000000;
         y += v_y * _dt / 1000000;
     }
-    void update(){
-        dt = deltaT;
-        deltaT = 0;
-        //Serial.println(dt);
-        update(dt);
+    void update(unsigned long _dt){
+    	float alpha = getRot(_dt);
+    	update(_dt, alpha);
     }
+    void update(float alpha){
+        unsigned long _dt = getDt();
+        update(_dt, alpha);
+    }
+    void update(){
+    	unsigned long _dt = getDt();
+    	float alpha = getRot(_dt);
+    	update(_dt, alpha);
+    }
+
     void zero(){
         x = 0;
         y = 0;
@@ -128,4 +121,27 @@ private:
 
     float average_theta;
     float alpha;
+
+    unsigned long getDt(){
+    	dt = deltaT;
+        deltaT = 0;
+        return dt;
+    }
+
+    float getRot(unsigned long _dt){
+    	w = (c_b*s_c - c_c*s_b) * (*v_a)
+          + (c_c*s_a - c_a*s_c) * (*v_b)
+          + (c_a*s_b - c_b*s_a) * (*v_c);
+
+        w = w / det / R;  // in rad
+        w = w * 180 / PI; // in deg
+
+        // linear equations solved. Now integrate.
+        
+        theta += w * _dt / 1000000;
+        if (theta >= 360) theta -= 360;
+
+        average_theta = theta - w * _dt / 1000000 / 2;
+        return -average_theta;
+    }
 };

@@ -2,6 +2,21 @@
  * 
  * Open sourced under the MIT License (see LICENSE.txt)
  * (c) Brian Chen 2015
+ *
+ * Balancing method 1
+ *     Target roll/pitch based on position
+ *     PID loop on position calculates target roll/pitch
+ *     Target roll/pitch passed as input into P controller
+ *     for motor output.
+ * 
+ * Balancing method 2 (allows remote control)
+ *     Target velocity based on position
+ *     PD loop on position calculates target velocity
+ *     Tarvet velocity passed as input into PID controller
+ *     for target roll/pitch
+ *     Target roll/pitch passed as input into P controller
+ *     for motor output
+ *
  */
 
 #define SIGN(a) (a < 0 ? -1 : 1)
@@ -17,10 +32,10 @@ public:
     float d_theta_x_prev, d_theta_y_prev;
     float int_theta_x, int_theta_y;
 
-    float kp_dtheta, ki_dtheta, kd_dtheta;
-    float e_dtheta_x, e_dtheta_y;
-    float d_dtheta_x, d_dtheta_y;
-    float int_dtheta_x, int_dtheta_y;
+    float kp_v, ki_v, kd_v;
+    float e_v_x, e_v_y;
+    float d_v_x, d_v_y;
+    float int_v_x, int_v_y;
 
     float kp_pos, ki_pos, kd_pos;
     float e_pos_x, e_pos_y;
@@ -42,15 +57,15 @@ public:
         p = _p; // pitch
     }
     void setTunings(float _kp_theta, float _ki_theta, float _kd_theta,
-                    float _kp_dtheta, float _ki_dtheta, float _kd_dtheta,
+                    float _kp_v, float _ki_v, float _kd_v,
                     float _kp_pos, float _ki_pos, float _kd_pos){
         kp_theta = _kp_theta;
         ki_theta = _ki_theta;
         kd_theta = _kd_theta;
 
-        kp_dtheta = _kp_dtheta;
-        ki_dtheta = _ki_dtheta;
-        kd_dtheta = _kd_dtheta;
+        kp_v = _kp_v;
+        ki_v = _ki_v;
+        kd_v = _kd_v;
 
         kp_pos = _kp_pos;
         ki_pos = _ki_pos;
@@ -60,13 +75,13 @@ public:
         tip_limit = _tip_limit;
     }
     void setOffset(float _targ_theta_x, float _targ_theta_y,
-                   float _targ_dtheta_x, float _targ_dtheta_y,
+                   float _targ_v_x, float _targ_v_y,
                    float _targ_pos_x, float _targ_pos_y){
         targ_theta_x = _targ_theta_x;
         targ_theta_y = _targ_theta_y;
 
-        targ_dtheta_x = _targ_dtheta_x;
-        targ_dtheta_y = _targ_dtheta_y;
+        targ_v_x = _targ_v_x;
+        targ_v_y = _targ_v_y;
 
         targ_pos_x = _targ_pos_x;
         targ_pos_y = _targ_pos_y;
@@ -88,9 +103,6 @@ public:
             e_pos_x = targ_pos_x - *pos_x;
             e_pos_y = targ_pos_y - *pos_y;
 
-            // e_pos_x = SIGN(e_pos_x) * pow(e_pos_x, 2);
-            // e_pos_y = SIGN(e_pos_y) * pow(e_pos_y, 2);
-
             d_pos_x = (*pos_x - pos_x_prev)*1000000/dt;
             d_pos_y = (*pos_y - pos_y_prev)*1000000/dt;
 
@@ -100,6 +112,7 @@ public:
             int_pos_x += ki_pos * e_pos_x * dt / 1000000;
             int_pos_y += ki_pos * e_pos_y * dt / 1000000;
 
+            // saturate integral term
             if (int_pos_x > 10) int_pos_x = 10 * SIGN(int_pos_x);
             if (int_pos_y > 10) int_pos_y = 10 * SIGN(int_pos_y);
 
@@ -121,6 +134,7 @@ public:
             }
 
             if (pos_cor_angular_mode){
+                // assign target angle based on position
             	targ_theta_x = temp_x;
 	            targ_theta_y = temp_y;
 
@@ -132,14 +146,39 @@ public:
 	            }
             }
             else{
+                // assign target velocity based on position
             	if (abs(temp_x) > 255) temp_x = 255  * SIGN(temp_x);
             	if (abs(temp_y) > 255) temp_y = 255  * SIGN(temp_y);
-            	*v_x += temp_x;
-            	*v_y += temp_y;
+
+                targ_v_x += temp_x;
+            	targ_v_y += temp_y;
             }
         }
 
         if (balance){
+            // first comes the velocity controller
+            d_v_x = (d_theta_x - d_theta_x_prev)*1000000/dt;
+            d_v_y = (d_theta_y - d_theta_y_prev)*1000000/dt;
+
+            d_theta_x_prev = d_theta_x;
+            d_theta_y_prev = d_theta_y;
+
+            e_v_x = targ_v_x - d_theta_x;
+            e_v_y = targ_v_y - d_theta_y;
+
+            int_v_x += ki_v * e_v_x * dt / 1000000;
+            int_v_y += ki_v * e_v_y * dt / 1000000;
+
+            if (pos_cor_angular_mode){
+                // do nothing
+            }
+            else{
+                // assign target roll/pitch
+                targ_theta_x = kp_v * e_v_x + int_v_x - kd_v * d_v_x;
+                targ_theta_y = kp_v * e_v_y + int_v_y - kd_v * d_v_y;
+            }       
+
+            // then comes the roll/pitch controller
             d_theta_x = (*p - p_prev)*1000000/dt;
             d_theta_y = (*r - r_prev)*1000000/dt;
 
@@ -152,22 +191,8 @@ public:
             int_theta_x += ki_theta * e_theta_x * dt / 1000000;
             int_theta_y += ki_theta * e_theta_y * dt / 1000000;
 
-            d_dtheta_x = (d_theta_x - d_theta_x_prev)*1000000/dt;
-            d_dtheta_y = (d_theta_y - d_theta_y_prev)*1000000/dt;
-
-            d_theta_x_prev = d_theta_x;
-            d_theta_y_prev = d_theta_y;
-
-            e_dtheta_x = targ_dtheta_x - d_theta_x;
-            e_dtheta_y = targ_dtheta_y - d_theta_y;
-
-            int_dtheta_x += ki_dtheta * e_dtheta_x * dt / 1000000;
-            int_dtheta_y += ki_dtheta * e_dtheta_y * dt / 1000000;
-
-            *v_x += kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x 
-                  + kp_dtheta * e_dtheta_x + int_dtheta_x + kd_dtheta * d_dtheta_x;
-            *v_y += kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y 
-                  + kp_dtheta * e_dtheta_y + int_dtheta_y + kd_dtheta * d_dtheta_y;	            
+            *v_x += kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x;
+            *v_y += kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y;
         }
 
         if (abs(*v_x) > tip_limit || abs(*v_y) > tip_limit){
@@ -203,8 +228,8 @@ public:
         int_theta_x = 0;
         int_theta_y = 0;
 
-        int_dtheta_x = 0;
-        int_dtheta_y = 0;
+        int_v_x = 0;
+        int_v_y = 0;
 
         int_pos_x = 0;
         int_pos_y = 0;
@@ -262,7 +287,7 @@ private:
     float targ_theta_x, targ_theta_y;
 
     /* dtheta var */
-    float targ_dtheta_x, targ_dtheta_y;
+    float targ_v_x, targ_v_y;
 
     /* pos correction */
     bool pos_cor = true;

@@ -241,7 +241,7 @@ extern "C" int main () {
         }
         else if (loopCountMod4 == 1){
             // motor velocity pid control
-            if (motorPidControl){               
+            if (motorPidControl){              
 
                 pidMtrA.Compute();
                 pidMtrB.Compute();

@@ -113,8 +113,8 @@ public:
             int_pos_y += ki_pos * e_pos_y * dt / 1000000;
 
             // saturate integral term
-            if (int_pos_x > 10) int_pos_x = 10 * SIGN(int_pos_x);
-            if (int_pos_y > 10) int_pos_y = 10 * SIGN(int_pos_y);
+            if (abs(int_pos_x) > 10) int_pos_x = 10 * SIGN(int_pos_x);
+            if (abs(int_pos_y) > 10) int_pos_y = 10 * SIGN(int_pos_y);
 
             float v_x_abs = kp_pos * e_pos_x + int_pos_x - kd_pos * d_pos_x;
             float v_y_abs = kp_pos * e_pos_y + int_pos_y - kd_pos * d_pos_y;
@@ -291,7 +291,7 @@ private:
 
     /* pos correction */
     bool pos_cor = true;
-    bool pos_cor_angular_mode = true;
+    bool pos_cor_angular_mode = false;
     bool flip_pos_cor = false;
 
     

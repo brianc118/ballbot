@@ -308,21 +308,21 @@ public:
                     port.println("Status: ");
                     port.print('\t');
                     port.print("balanceEnabled = ");
-                    port.print(bController.balanceEnabled());    port.print(", ");
+                    port.print(bController.balanceEnabled()); port.print(", ");
                     port.print("posCorEnabled = ");
-                    port.print(bController.posCorEnabled());    port.print(", ");
+                    port.print(bController.posCorEnabled());  port.print(", ");
                     port.print("calibMotorMode = ");
-                    port.print(calibMotorMode);                    port.print(", ");
-                    port.print("min motor power = ");        port.print(", ");
+                    port.print(calibMotorMode);               port.print(", ");
+                    port.print("min motor power = ");         port.print(", ");
                     port.print(motorMinPwr);
                     port.print("blinkInterval = ");
                     port.print(blinkInterval);
                     port.print(" (");
                     switch(blinkInterval){
-                        case BLINK_OK_INTERVAL:                port.print("BLINK_OK_INTERVAL");          break;
+                        case BLINK_OK_INTERVAL:             port.print("BLINK_OK_INTERVAL");          break;
                         case BLINK_STOPPED_INTERVAL:        port.print("BLINK_STOPPED_INTERVAL");      break;                
                         case BLINK_CALIB_MOTOR_INTERVAL:    port.print("BLINK_CALIB_MOTOR_INTERVAL"); break;                        
-                        case BLINK_SENSOR_ERR_INTERVAL:        port.print("BLINK_SENSOR_ERR_INTERVAL");  break;                
+                        case BLINK_SENSOR_ERR_INTERVAL:     port.print("BLINK_SENSOR_ERR_INTERVAL");  break;                
                         default:                            port.print("???");                          break;                        
                     }
                     port.println(")");
@@ -332,11 +332,11 @@ public:
                     port.print(bController.kp_theta, 8);     port.print(", ");
                     port.print(bController.ki_theta, 8);     port.print(", ");
                     port.print(bController.kd_theta, 8);     port.print(", ");
-                    port.print(bController.kp_dtheta, 8);     port.print(", ");
-                    port.print(bController.ki_dtheta, 8);     port.print(", ");
-                    port.print(bController.kd_dtheta, 8);     port.print(", ");
-                    port.print(bController.kp_pos, 8);         port.print(", ");
-                    port.print(bController.ki_pos, 8);         port.print(", ");
+                    port.print(bController.kp_v, 8);    port.print(", ");
+                    port.print(bController.ki_v, 8);    port.print(", ");
+                    port.print(bController.kd_v, 8);    port.print(", ");
+                    port.print(bController.kp_pos, 8);       port.print(", ");
+                    port.print(bController.ki_pos, 8);       port.print(", ");
                     port.println(bController.kd_pos, 8);
                     }
                     break;
@@ -350,9 +350,9 @@ public:
 
                     if (readData(buffer, my_array, 9)){
                         bController.setTunings(my_array[0], my_array[1], my_array[2],
-                                                   my_array[3], my_array[4], my_array[5],
-                                                   my_array[6], my_array[7], my_array[8]);
-                        port.println("Set PID parameters: ");    port.print('\t');                        
+                                               my_array[3], my_array[4], my_array[5],
+                                               my_array[6], my_array[7], my_array[8]);
+                        port.println("Set PID parameters: ");      port.print('\t');                        
                         port.print(my_array[0], 8);                port.print('\t');
                         port.print(my_array[1], 8);                port.print('\t');
                         port.print(my_array[2], 8);                port.print('\t');
@@ -621,12 +621,12 @@ public:
         print(bController.d_theta_x * bController.kd_theta);    print('\t');
         print(bController.d_theta_y * bController.kd_theta);    print('\t');
 
-        // print(bController.e_dtheta_x * bController.kp_dtheta); print('\t');
-        // print(bController.e_dtheta_y * bController.kp_dtheta); print('\t');    
-        // print(bController.int_dtheta_x);                       print('\t');
-        // print(bController.int_dtheta_y);                       print('\t');
-        // print(bController.d_dtheta_x * bController.kd_dtheta); print('\t');
-        // print(bController.d_dtheta_y * bController.kd_dtheta); print('\t');
+        // print(bController.e_v_x * bController.kp_v); print('\t');
+        // print(bController.e_v_y * bController.kp_v); print('\t');    
+        // print(bController.int_v_x);                       print('\t');
+        // print(bController.int_v_y);                       print('\t');
+        // print(bController.d_v_x * bController.kd_v); print('\t');
+        // print(bController.d_v_y * bController.kd_v); print('\t');
         print(vA); print('\t');
         print(vA_targ); print('\t');    
         print(vB); print('\t');
@@ -672,27 +672,27 @@ static void storeBalanceTunings(){
     EEPROM_writeAnything(200, bController.kp_theta);
     EEPROM_writeAnything(204, bController.ki_theta);
     EEPROM_writeAnything(208, bController.kd_theta);
-    EEPROM_writeAnything(252, bController.kp_dtheta);
-    EEPROM_writeAnything(256, bController.ki_dtheta);
-    EEPROM_writeAnything(260, bController.kd_dtheta);
+    EEPROM_writeAnything(252, bController.kp_v);
+    EEPROM_writeAnything(256, bController.ki_v);
+    EEPROM_writeAnything(260, bController.kd_v);
 }
 
 static void readBalanceTunings(){
     float _kp_theta, _ki_theta, _kd_theta;
-    float _kp_dtheta, _ki_dtheta, _kd_dtheta;
+    float _kp_v, _ki_v, _kd_v;
     EEPROM_readAnything(200, _kp_theta);
     EEPROM_readAnything(204, _ki_theta);
     EEPROM_readAnything(208, _kd_theta);
-    EEPROM_readAnything(252, _kp_dtheta);
-    EEPROM_readAnything(256, _ki_dtheta);
-    EEPROM_readAnything(260, _kd_dtheta);
+    EEPROM_readAnything(252, _kp_v);
+    EEPROM_readAnything(256, _ki_v);
+    EEPROM_readAnything(260, _kd_v);
     bController.setTunings(
         _kp_theta,
         _ki_theta,
         _kd_theta,
-        _kp_dtheta,
-        _ki_dtheta,
-        _kd_dtheta,
+        _kp_v,
+        _ki_v,
+        _kd_v,
         bController.kp_pos,
         bController.ki_pos,
         bController.kd_pos
@@ -713,9 +713,9 @@ static void readPosTunings(){
         bController.kp_theta,
         bController.ki_theta,
         bController.kd_theta,
-        bController.kp_dtheta,
-        bController.ki_dtheta,
-        bController.kd_dtheta,
+        bController.kp_v,
+        bController.ki_v,
+        bController.kd_v,
         _kp_pos,
         _ki_pos,
         _kd_pos

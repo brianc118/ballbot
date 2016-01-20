@@ -204,10 +204,14 @@ extern "C" int main () {
                     if (btDebug){
                         btCtrl.println("---");
                         btCtrl.println("Fell");
+                        btCtrl.debug();
+                        btCtrl.println("---");
                     }
                     if (serDebug){
-                        Serial.println("---");
-                        Serial.println("Fell");
+                        serCtrl.println("---");
+                        serCtrl.println("Fell");
+                        serCtrl.debug();
+                        serCtrl.println("---");
                     }
 
                     bController.disable();  // disable balancing

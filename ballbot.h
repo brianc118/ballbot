@@ -575,13 +575,35 @@ public:
         } 
         else{
             while (port.available()){
-                char c = port.read();
-                buffer[cnt++] = c;
-                if ((c == '\n') || (cnt == sizeof(buffer)-1)){
-                    buffer[cnt] = '\0';
-                    cnt = 0;
-                    ready = true;
-                }
+                incoming_c = port.read();                        
+                switch(incoming_c){
+                    // special commands that don't require newline
+                    case '$':       bController.setTargV(0, 0);      break; //stop
+                    case '<':       bController.setTargV(-100, 0);   break; //l
+                    case '>':       bController.setTargV(100, 0);    break; //r
+                    case '^':       bController.setTargV(0, 100);    break; //f
+                    case '|':       bController.setTargV(0, -100);   break; //b
+                    case '`':       bController.setTargV(-71, 71);   break; //fl
+                    case (char)39:  bController.setTargV(71, 71);    break; //fr '''
+                    case '/':       bController.setTargV(-71, -71);  break; //bl
+                    case (char)92:  bController.setTargV(71, -71);   break; //br '\''
+                    default:
+                    {
+                        buffer[cnt++] = incoming_c;
+                        if ((incoming_c == '\n') || (cnt == sizeof(buffer)-1)){
+                            buffer[cnt] = '\0';
+                            cnt = 0;
+                            ready = true;
+                        }
+                    } 
+                    break;  
+                }    
+                // buffer[cnt++] = c;
+                // if ((c == '\n') || (cnt == sizeof(buffer)-1)){
+                //     buffer[cnt] = '\0';
+                //     cnt = 0;
+                //     ready = true;
+                // }                
             }
         }
     }
@@ -621,18 +643,18 @@ public:
         print(bController.d_theta_x * bController.kd_theta);    print('\t');
         print(bController.d_theta_y * bController.kd_theta);    print('\t');
 
-        // print(bController.e_v_x * bController.kp_v); print('\t');
-        // print(bController.e_v_y * bController.kp_v); print('\t');    
-        // print(bController.int_v_x);                       print('\t');
-        // print(bController.int_v_y);                       print('\t');
-        // print(bController.d_v_x * bController.kd_v); print('\t');
-        // print(bController.d_v_y * bController.kd_v); print('\t');
-        print(vA); print('\t');
-        print(vA_targ); print('\t');    
-        print(vB); print('\t');
-        print(vB_targ); print('\t');
-        print(vC); print('\t');
-        print(vC_targ); print('\t');
+        print(bController.e_v_x * bController.kp_v); print('\t');
+        print(bController.e_v_y * bController.kp_v); print('\t');    
+        print(bController.int_v_x);                       print('\t');
+        print(bController.int_v_y);                       print('\t');
+        print(bController.d_v_x * bController.kd_v); print('\t');
+        print(bController.d_v_y * bController.kd_v); print('\t');
+        // print(vA); print('\t');
+        // print(vA_targ); print('\t');    
+        // print(vB); print('\t');
+        // print(vB_targ); print('\t');
+        // print(vC); print('\t');
+        // print(vC_targ); print('\t');
 
         print(bController.e_pos_x * bController.kp_pos); print('\t');
         print(bController.e_pos_y * bController.kp_pos); print('\t');    
@@ -652,6 +674,7 @@ public:
 private:
     Stream &port;
     /* reading */
+    char incoming_c;
     char buffer [64];
     int cnt = 0;
     bool ready = false;

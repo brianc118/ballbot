@@ -16,6 +16,7 @@
  *     for target roll/pitch
  *     Target roll/pitch passed as input into P controller
  *     for motor output
+ *     Position controller (PD) -> velocity controller (PID) -> pitch/roll controller (P)
  *
  */
 
@@ -29,7 +30,6 @@ public:
     float kp_theta, ki_theta, kd_theta;
     float e_theta_x, e_theta_y;
     float d_theta_x, d_theta_y;
-    float d_theta_x_prev, d_theta_y_prev;
     float int_theta_x, int_theta_y;
 
     float kp_v, ki_v, kd_v;
@@ -92,6 +92,11 @@ public:
         targ_pos_y = _targ_pos_y;
     }
 
+    void setTargV(float _targ_v_x, float _targ_v_y){
+        targ_v_x = _targ_v_x;
+        targ_v_y = _targ_v_y;
+    }
+
     bool update(){
         unsigned long dt = deltaT;
         deltaT = 0;
@@ -100,21 +105,26 @@ public:
         *v_y = 0;
 
         if (pos_cor){
+            /* position controller. */
             e_pos_x = targ_pos_x - *pos_x;
             e_pos_y = targ_pos_y - *pos_y;
 
-            d_pos_x = (*pos_x - pos_x_prev)*1000000/dt;
-            d_pos_y = (*pos_y - pos_y_prev)*1000000/dt;
+            if (!firstRun){
+                d_pos_x = (*pos_x - pos_x_prev)*1000000/dt;
+                d_pos_y = (*pos_y - pos_y_prev)*1000000/dt;
+            }
 
             pos_x_prev = *pos_x;
             pos_y_prev = *pos_y;
 
-            int_pos_x += ki_pos * e_pos_x * dt / 1000000;
-            int_pos_y += ki_pos * e_pos_y * dt / 1000000;
+            if (!firstRun){
+                int_pos_x += ki_pos * e_pos_x * dt / 1000000;
+                int_pos_y += ki_pos * e_pos_y * dt / 1000000;
+            }
 
             // saturate integral term
-            if (abs(int_pos_x) > 10) int_pos_x = 10 * SIGN(int_pos_x);
-            if (abs(int_pos_y) > 10) int_pos_y = 10 * SIGN(int_pos_y);
+            if (abs(int_pos_x) > 100) int_pos_x = 100 * SIGN(int_pos_x);
+            if (abs(int_pos_y) > 100) int_pos_y = 100 * SIGN(int_pos_y);
 
             float v_x_abs = kp_pos * e_pos_x + int_pos_x - kd_pos * d_pos_x;
             float v_y_abs = kp_pos * e_pos_y + int_pos_y - kd_pos * d_pos_y;
@@ -156,18 +166,22 @@ public:
         }
 
         if (balance){
-            // first comes the velocity controller
-            d_v_x = (d_theta_x - d_theta_x_prev)*1000000/dt;
-            d_v_y = (d_theta_y - d_theta_y_prev)*1000000/dt;
+            /* velocity controller */
+            if (!firstRun){
+                d_v_x = (d_pos_x - d_pos_x_prev)*1000/dt;
+                d_v_y = (d_pos_y - d_pos_y_prev)*1000/dt;
+            }
 
-            d_theta_x_prev = d_theta_x;
-            d_theta_y_prev = d_theta_y;
+            d_pos_x_prev = d_pos_x;
+            d_pos_y_prev = d_pos_y;
 
-            e_v_x = targ_v_x - d_theta_x;
-            e_v_y = targ_v_y - d_theta_y;
+            e_v_x = (targ_v_x - d_pos_x)/100;
+            e_v_y = (targ_v_y - d_pos_y)/100;
 
-            int_v_x += ki_v * e_v_x * dt / 1000000;
-            int_v_y += ki_v * e_v_y * dt / 1000000;
+            if (!firstRun){
+                int_v_x += ki_v * e_v_x * dt / 1000000;
+                int_v_y += ki_v * e_v_y * dt / 1000000;
+            }
 
             if (pos_cor_angular_mode){
                 // do nothing
@@ -176,11 +190,14 @@ public:
                 // assign target roll/pitch
                 targ_theta_x = kp_v * e_v_x + int_v_x - kd_v * d_v_x;
                 targ_theta_y = kp_v * e_v_y + int_v_y - kd_v * d_v_y;
+                // Serial.println(targ_theta_x);
             }       
 
-            // then comes the roll/pitch controller
-            d_theta_x = (*p - p_prev)*1000000/dt;
-            d_theta_y = (*r - r_prev)*1000000/dt;
+            /* roll/pitch controller */
+            if (!firstRun){
+                d_theta_x = (*p - p_prev)*1000000/dt;
+                d_theta_y = (*r - r_prev)*1000000/dt;
+            }
 
             p_prev = *p;
             r_prev = *r;
@@ -188,8 +205,10 @@ public:
             e_theta_x = targ_theta_x - *p;
             e_theta_y = targ_theta_y - *r;            
 
-            int_theta_x += ki_theta * e_theta_x * dt / 1000000;
-            int_theta_y += ki_theta * e_theta_y * dt / 1000000;
+            if (!firstRun){
+                int_theta_x += ki_theta * e_theta_x * dt / 1000000;
+                int_theta_y += ki_theta * e_theta_y * dt / 1000000;
+            }
 
             *v_x += kp_theta * e_theta_x + int_theta_x + kd_theta * d_theta_x;
             *v_y += kp_theta * e_theta_y + int_theta_y + kd_theta * d_theta_y;
@@ -199,6 +218,10 @@ public:
             if (abs(*v_x) > tip_limit) *v_x = tip_limit * SIGN(*v_x);
             if (abs(*v_y) > tip_limit) *v_y = tip_limit * SIGN(*v_y);
             return false;
+        }
+
+        if (firstRun){
+            firstRun = false;
         }
 
         return true;
@@ -237,6 +260,8 @@ public:
 
         *v_x = 0;
         *v_y = 0;
+
+        firstRun = true;
     }
     void enableBalance(){
         balance = true;
@@ -269,6 +294,7 @@ public:
 private:
     bool enabled = true;
     elapsedMicros deltaT;
+    bool firstRun = true;
 
     int tip_limit = 150;
 
@@ -281,13 +307,14 @@ private:
     float *pos_x, *pos_y;
     float pos_x_prev, pos_y_prev;
 
-    /* balancing var */
+    /* balancing (yaw/pitch control) var */
     bool balance = true;
     
     float targ_theta_x, targ_theta_y;
 
-    /* dtheta var */
+    /* velocity var */
     float targ_v_x, targ_v_y;
+    float d_pos_x_prev, d_pos_y_prev;
 
     /* pos correction */
     bool pos_cor = true;

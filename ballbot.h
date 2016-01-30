@@ -175,6 +175,7 @@ int32_t pA, pB, pC;
 float pA_f, pB_f, pC_f;
 float pidOutA, pidOutB, pidOutC;
 uint8_t motorMinPwr = 12;
+float motorPwrScalar = 0.8;
 
 bool motorPidControl = false;
 
@@ -578,6 +579,12 @@ public:
                 incoming_c = port.read();                        
                 switch(incoming_c){
                     // special commands that don't require newline
+                    case 'e':
+                        {
+                        port.println("Enabled bController");
+                        bController.enable();
+                        }
+                        break;
                     case '$':       bController.setTargV(0, 0);      break; //stop
                     case '<':       bController.setTargV(-100, 0);   break; //l
                     case '>':       bController.setTargV(100, 0);    break; //r

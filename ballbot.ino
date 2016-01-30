@@ -283,6 +283,10 @@ extern "C" int main () {
                     }
                 }
             }
+            
+            pA *= motorPwrScalar;
+            pB *= motorPwrScalar;
+            pC *= motorPwrScalar;
 
             motorA.move(pA);
             motorB.move(pB);

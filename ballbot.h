@@ -579,7 +579,7 @@ public:
                 incoming_c = port.read();                        
                 switch(incoming_c){
                     // special commands that don't require newline
-                    case 'e':
+                    case 'E':
                         {
                         port.println("Enabled bController");
                         bController.enable();

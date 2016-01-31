@@ -544,13 +544,7 @@ public:
                         }
                     } 
                     break;  
-                }    
-                // buffer[cnt++] = c;
-                // if ((c == '\n') || (cnt == sizeof(buffer)-1)){
-                //     buffer[cnt] = '\0';
-                //     cnt = 0;
-                //     ready = true;
-                // }                
+                }        
             }
         }
     }
@@ -575,7 +569,6 @@ public:
 
     size_t write(uint8_t b){
         append((char)b);
-        // port.print(b);
         return 1;
     }
     void sendNames(){
@@ -926,7 +919,6 @@ inline void encoderGetVelocity(){
     encUpdateDt = 0;
 
     wA = (rtA - prA) * 1000000 / dt / CPRAD;
-    // wA /= 1000000;
     vA = wA * WHEEL_R;
     tA += wA * dt;
 

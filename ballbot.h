@@ -391,6 +391,9 @@ public:
                     }
                     }
                     break;
+                case '?':
+                	sendNames();
+                	break;
                 case ']':
 					disableDebug();                    
                     break;
@@ -627,7 +630,39 @@ public:
         // port.print(b);
         return 1;
     }
+    void sendNames(){
+    	print("now");   			    print('\t');
+    	print("roll");  			    print('\t');
+    	print("pitch"); 			    print('\t');
+    	print("e_theta_x*kp"); 		    print('\t');
+    	print("e_theta_x*kp"); 		    print('\t');    
+        print("int_theta_x");  		    print('\t');
+        print("int_theta_y");           print('\t');
+        print("d_theta_x*kd_theta");    print('\t');
+        print("d_theta_y*kd_theta");    print('\t');
 
+        print("e_v_x*kp_v"); print('\t');
+        print("e_v_y*kp_v"); print('\t');    
+        print("int_v_x");    print('\t');
+        print("int_v_y");    print('\t');
+        print("d_v_x*kd_v"); print('\t');
+        print("d_v_y*kd_v"); print('\t');
+
+        print("e_pos_x*kp_pos"); print('\t');
+        print("e_pos_y*kp_pos"); print('\t');    
+        print("int_pos_x");      print('\t');
+        print("int_pos_y");      print('\t');
+        print("d_pos_x*kd_pos"); print('\t');
+        print("d_pos_y*kd_pos"); print('\t');
+        
+        print("v_x");      print('\t');
+        print("v_y");      print('\t');
+        print("pA");       print('\t');
+        print("pB");       print('\t');
+        print("pC");       print('\t');
+        print("pos_x");    print('\t');
+        println("pos_y");
+    }
     void debug(){
         print(now);                                             print('\t');
         print(roll);                                            print('\t');
@@ -641,17 +676,11 @@ public:
 
         print(bController.e_v_x * bController.kp_v); print('\t');
         print(bController.e_v_y * bController.kp_v); print('\t');    
-        print(bController.int_v_x);                       print('\t');
-        print(bController.int_v_y);                       print('\t');
+        print(bController.int_v_x);                  print('\t');
+        print(bController.int_v_y);                  print('\t');
         print(bController.d_v_x * bController.kd_v); print('\t');
         print(bController.d_v_y * bController.kd_v); print('\t');
-        // print(vA); print('\t');
-        // print(vA_targ); print('\t');    
-        // print(vB); print('\t');
-        // print(vB_targ); print('\t');
-        // print(vC); print('\t');
-        // print(vC_targ); print('\t');
-
+        
         print(bController.e_pos_x * bController.kp_pos); print('\t');
         print(bController.e_pos_y * bController.kp_pos); print('\t');    
         print(bController.int_pos_x);                    print('\t');

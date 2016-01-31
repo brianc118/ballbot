@@ -30,6 +30,7 @@
 #include <SPI.h>
 #include <EEPROM.h>
 #include <FrequencyTimer2.h>   // Built into teensy core
+#include <PID_v1.h>
 
 /* own libraries */
 #include <EEPROMAnything.h>    // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
@@ -38,7 +39,6 @@
 #include <fastTrig.h>          // https://github.com/brianchen118/fastTrig
 #include <omnidrive.h>         // see https://github.com/brianchen118/omnidrive
 #include <sensorfusion.h>      // see https://github.com/brianchen118/sensorfusion
-#include <PID_v1.h>
 #include "balanceController.h"
 #include "locationCalculator.h"
 #include "macros.h"

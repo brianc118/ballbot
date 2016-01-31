@@ -998,19 +998,6 @@ inline void encoderGetVelocity(){
     prC = rtC;
 }
 
-bool bluetoothEcho(){
-    char c;
-    if(BT.available()){
-        Serial.print((char)BT.read());  
-    }
-    if(Serial.available()){
-        c = Serial.read();
-        if(c == '~') return false;
-        BT.print(c);
-    }
-    return true;
-}
-
 void calibMotorModeRoutine(){
     if (calibMotorModeDt >= 100000){
         calibMotorModeDt = 0;

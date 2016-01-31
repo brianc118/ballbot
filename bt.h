@@ -32,3 +32,16 @@ void btSetup(uint8_t module, int initBaud, int finalBaud){
         }
     }
 }
+
+bool bluetoothEcho(){
+    char c;
+    if(BT.available()){
+        Serial.print((char)BT.read());  
+    }
+    if(Serial.available()){
+        c = Serial.read();
+        if(c == '~') return false;
+        BT.print(c);
+    }
+    return true;
+}

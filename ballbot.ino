@@ -47,6 +47,8 @@
 #define POS_LPF_T 200.0f
 elapsedMicros posLPF_dt;
 
+IntervalTimer intService;
+
 /* Main part of the program begins here.
  *
  */

@@ -60,11 +60,11 @@ extern "C" int main () {
 
     Serial.begin(115200);   // doesn't really matter what we put here (Teensy 3.x serial isn't "real" serial)
 
-    btSetup(HC06, 921600, BAUD_1382400);  
-
     pinMode(INT_PIN, INPUT);
     pinMode(LED, OUTPUT);    digitalWriteFast(LED, HIGH);   // initial set LEDs on high
-    pinMode(LED2, OUTPUT);    digitalWriteFast(LED2, HIGH);  
+    pinMode(LED2, OUTPUT);    digitalWriteFast(LED2, HIGH);
+
+    btSetup(HC06, 921600, BAUD_1382400);    
 
     // use a higher frequency of >12kHz to reduce audible sound and reduce switching losses
     motorA.begin(PWM_FREQ);  

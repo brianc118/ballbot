@@ -134,7 +134,7 @@ float roll_offset, pitch_offset;
 
 float mag_scalar[3], mag_bias[3];
 
-IntervalTimer intService;
+
 /* since there are 4 phases a quadrature encoder goes through, there are 16 combinations, many of which
    are invalid (and hence = 0) */
 const int32_t enc_TAB[]= { 0, 1, -1, 0,

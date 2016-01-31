@@ -57,10 +57,10 @@ elapsedMicros posLPF_dt;
 #define HC06 1
 
 void btSetup(uint8_t module, int initBaud, int finalBaud){
-    if (module == 0){
+    if (module == RN42){
 
     }
-    else if (module == 1){
+    else if (module == HC06){
         BT.begin(initBaud);
         delay(100);
         Serial.print("AT");

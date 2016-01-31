@@ -17,7 +17,13 @@
  *    - PID control for position of robot
  *    - Debugging via bluetooth and serial to computer (the RN42 is quite slow)
  *    
- *
+ * TODO
+ *    - Improve magnetometer calibration routine
+ *    - Implemented tilt compensated bearing calculations with magnetometer
+ *    - Pass tilt compensated bearing to position calculator
+ *    - Implement yaw correction
+ *    - 
+ *    
  * (C) Brian Chen 2015
  */
 
@@ -39,9 +45,6 @@
 
 #define POS_LPF_T 200.0f
 elapsedMicros posLPF_dt;
-
-float pos_x_arr[20];
-float pos_y_arr[20];
 
 #define BAUD_9600 0
 #define BAUD_115200 1
@@ -86,11 +89,7 @@ extern "C" int main () {
 
     Serial.begin(115200);   // doesn't really matter what we put here (Teensy 3.x serial isn't "real" serial)
 
-    btSetup(HC06, 921600, BAUD_1382400);   
-    // while (true){
-    //     bluetoothEcho();
-    // }
-    // BT.begin(115200);
+    btSetup(HC06, 921600, BAUD_1382400);  
 
     pinMode(INT_PIN, INPUT);
     pinMode(LED, OUTPUT);    digitalWriteFast(LED, HIGH);   // initial set LEDs on high
@@ -151,16 +150,9 @@ extern "C" int main () {
     bController.setTipLimit(255);    // limit of velocity component before tip
     bController.enablePosCorFlip();  // flip coordinates
 
-    //bController.disableBalance();
-    //bController.disablePosCorrection();
-
     // default priority of 127. The lower the number, the higher the priority.
     intService.priority(127);  
     intService.begin(intServiceRoute, INT_UPDATE_INTERVAL);
-
-    // vA_targ = 300;
-    // vB_targ = 300;
-    // vC_targ = 300;
 
     while(true){
         now = micros();
@@ -183,18 +175,6 @@ extern "C" int main () {
             float aa = POS_LPF_T/(float)(POS_LPF_T + dt);
             pos_x = aa * (-lCalculator.y) + (1 - aa) * pos_x;
             pos_y = aa * (-lCalculator.x) + (1 - aa) * pos_y;
-
-            // moving average filter
-            // ARRAYSHIFTDOWN(pos_x_arr, 0, 19);
-            // ARRAYSHIFTDOWN(pos_y_arr, 0, 19);
-
-            // pos_x_arr[0] = pos_x;
-            // pos_y_arr[0] = pos_y;
-
-            // ARRAYAVERAGE(pos_x_arr, pos_x);
-            // ARRAYAVERAGE(pos_y_arr, pos_y);
-
-            // PRINTARRAY(pos_x_arr);
 
             theta = lCalculator.theta;
 
@@ -315,15 +295,6 @@ void intServiceRoute(){
         digitalWriteFast(LED, !digitalReadFast(LED));
     }
 
-    // int motorChangeInterval = 5000;
-    // unsigned long motorMod = intUpdateCount % (int)(motorChangeInterval*1000/INT_UPDATE_INTERVAL);
-
-    // if (motorMod == 0){
-    //     vA_targ *= -1;
-    //     vB_targ *= -1;
-    //     vC_targ *= -1;
-    // }
-
     if (intMod10 == 0){
         switch(channelCount){
             case 0:
@@ -341,6 +312,3 @@ void intServiceRoute(){
 
     intUpdateCount++;
 }
-
-
-

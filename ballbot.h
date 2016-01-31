@@ -40,7 +40,6 @@
 
 #define MT_A_DIR  4
 #define MT_A_PWM  5
-//#define MT_A_PWM  4
 #define MT_A_BRK  16
 #define MT_A_FLIP false
 #define MT_A_CS   A10
@@ -53,19 +52,11 @@
 
 #define MT_C_DIR  8
 #define MT_C_PWM  6
-//#define MT_C_PWM  25
 #define MT_C_BRK  22
 #define MT_C_FLIP false
 #define MT_C_CS   A11
 
 #define INT_UPDATE_INTERVAL 18
-
-// #define ENCXA       21
-// #define ENCXB       17
-// #define ENCYA       3
-// #define ENCYB       2
-// #define ENCZA       20
-// #define ENCZB       15
 
 #define ENCXA       20
 #define ENCXB       15
@@ -130,6 +121,8 @@
         Serial.print(a[i]);                           \
         Serial.print('\t'); }                         \
     Serial.println('}'); }                            \
+
+String pgm_version = "1.0";
 
 int blinkInterval = BLINK_OK_INTERVAL;
 
@@ -224,7 +217,6 @@ static void readIMUOffset();
 void zeroImu();
 static void storeMotorMinPwr();
 static void readMotorMinPwr();
-
 void calibMagRoutine();
 void calcMagCalib();
 static void storeMagCalib();
@@ -327,7 +319,6 @@ public:
                         default:                            port.print("???");                          break;                        
                     }
                     port.println(")");
-
                     port.println("Tunings: ");
                     port.print('\t');
                     port.print(bController.kp_theta, 8);     port.print(", ");
@@ -568,7 +559,9 @@ public:
                     }
                     }
                     break;
-
+                case 'v':
+                	port.println(pgm_version);
+                	break;
                 default: 
                     // port.println("???");
                     break;

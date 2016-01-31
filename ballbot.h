@@ -251,6 +251,63 @@ public:
         }
         return true;
     }
+    void calibMag(){
+    	bcBalanceEnabled = bController.balanceEnabled();
+        bcPosCorEnabled = bController.posCorEnabled();
+
+        bController.disable();
+
+        port.println("Starting magnetometer calibration");                    
+        calibMagRoutine();
+        port.println("Finished calibration");
+        storeMagCalib();
+        port.println("Stored calibration");
+
+        if (bcBalanceEnabled) bController.enableBalance();
+        if (bcPosCorEnabled)  bController.enablePosCorrection();
+    }
+    void info(){
+    	port.println("Status: ");
+        port.print('\t');
+        port.print("balanceEnabled = ");
+        port.print(bController.balanceEnabled()); port.print(", ");
+        port.print("posCorEnabled = ");
+        port.print(bController.posCorEnabled());  port.print(", ");
+        port.print("calibMotorMode = ");
+        port.print(calibMotorMode);               port.print(", ");
+        port.print("min motor power = ");         port.print(", ");
+        port.print(motorMinPwr);
+        port.print("blinkInterval = ");
+        port.print(blinkInterval);
+        port.print(" (");
+        switch(blinkInterval){
+            case BLINK_OK_INTERVAL:             port.print("BLINK_OK_INTERVAL");          break;
+            case BLINK_STOPPED_INTERVAL:        port.print("BLINK_STOPPED_INTERVAL");      break;                
+            case BLINK_CALIB_MOTOR_INTERVAL:    port.print("BLINK_CALIB_MOTOR_INTERVAL"); break;                        
+            case BLINK_SENSOR_ERR_INTERVAL:     port.print("BLINK_SENSOR_ERR_INTERVAL");  break;                
+            default:                            port.print("???");                          break;                        
+        }
+        port.println(")");
+        port.println("Tunings: ");
+        port.print('\t');
+        port.print(bController.kp_theta, 8);     port.print(", ");
+        port.print(bController.ki_theta, 8);     port.print(", ");
+        port.print(bController.kd_theta, 8);     port.print(", ");
+        port.print(bController.kp_v, 8);    port.print(", ");
+        port.print(bController.ki_v, 8);    port.print(", ");
+        port.print(bController.kd_v, 8);    port.print(", ");
+        port.print(bController.kp_pos, 8);       port.print(", ");
+        port.print(bController.ki_pos, 8);       port.print(", ");
+        port.println(bController.kd_pos, 8);
+    }
+    void disableDebug(){
+    	btDebug = false;
+        serDebug = false;
+    }
+    void enableDebug(){
+    	btDebug = true;
+        serDebug = true;
+    }
     void update(){
         if (ready){
             ready = false;
@@ -259,18 +316,6 @@ public:
             buffer[0] = ',';
 
             switch(command){
-                case 'm':
-                    {
-                    float my_array[2];
-                    if (readData(buffer, my_array, 2)){
-                        bController.setTargPos(pos_x + my_array[0], pos_y + my_array[1]);
-                        Serial.print(pos_x + my_array[0]);
-                        Serial.print('\t');
-                        Serial.print(pos_y + my_array[1]);
-                        Serial.println();
-                    }
-                    }
-                    break;
                 case 'f':
                     {
                     if (buffer[1] == 'e')
@@ -280,57 +325,10 @@ public:
                     }
                     break;
                 case 'c':
-                    {
-                    bcBalanceEnabled = bController.balanceEnabled();
-                    bcPosCorEnabled = bController.posCorEnabled();
-
-                    bController.disable();
-
-                    port.println("Starting magnetometer calibration");                    
-                    calibMagRoutine();
-                    port.println("Finished calibration");
-                    storeMagCalib();
-                    port.println("Stored calibration");
-
-                    if (bcBalanceEnabled) bController.enableBalance();
-                    if (bcPosCorEnabled)  bController.enablePosCorrection();
-                    }
+                    calibMag();
                     break;
                 case 'i':
-                    {
-                    port.println("Status: ");
-                    port.print('\t');
-                    port.print("balanceEnabled = ");
-                    port.print(bController.balanceEnabled()); port.print(", ");
-                    port.print("posCorEnabled = ");
-                    port.print(bController.posCorEnabled());  port.print(", ");
-                    port.print("calibMotorMode = ");
-                    port.print(calibMotorMode);               port.print(", ");
-                    port.print("min motor power = ");         port.print(", ");
-                    port.print(motorMinPwr);
-                    port.print("blinkInterval = ");
-                    port.print(blinkInterval);
-                    port.print(" (");
-                    switch(blinkInterval){
-                        case BLINK_OK_INTERVAL:             port.print("BLINK_OK_INTERVAL");          break;
-                        case BLINK_STOPPED_INTERVAL:        port.print("BLINK_STOPPED_INTERVAL");      break;                
-                        case BLINK_CALIB_MOTOR_INTERVAL:    port.print("BLINK_CALIB_MOTOR_INTERVAL"); break;                        
-                        case BLINK_SENSOR_ERR_INTERVAL:     port.print("BLINK_SENSOR_ERR_INTERVAL");  break;                
-                        default:                            port.print("???");                          break;                        
-                    }
-                    port.println(")");
-                    port.println("Tunings: ");
-                    port.print('\t');
-                    port.print(bController.kp_theta, 8);     port.print(", ");
-                    port.print(bController.ki_theta, 8);     port.print(", ");
-                    port.print(bController.kd_theta, 8);     port.print(", ");
-                    port.print(bController.kp_v, 8);    port.print(", ");
-                    port.print(bController.ki_v, 8);    port.print(", ");
-                    port.print(bController.kd_v, 8);    port.print(", ");
-                    port.print(bController.kp_pos, 8);       port.print(", ");
-                    port.print(bController.ki_pos, 8);       port.print(", ");
-                    port.println(bController.kd_pos, 8);
-                    }
+                    info();
                     break;
                 case 't':    // set PID parameters
                     {
@@ -394,12 +392,10 @@ public:
                     }
                     break;
                 case ']':
-                    btDebug = false;
-                    serDebug = false;
+					disableDebug();                    
                     break;
                 case '[':
-                    btDebug = true;
-                    serDebug = true;
+                	enableDebug();                    
                     break;
                 case '+':
                     {

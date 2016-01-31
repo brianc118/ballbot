@@ -21,8 +21,6 @@
  * (C) Brian Chen 2015
  */
 
-#define BT Serial1
-
 #define SPI_CLOCK 8000000
 
 #define SCK_PIN  14

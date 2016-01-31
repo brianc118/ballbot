@@ -1,22 +1,4 @@
-/* Program for my ballbot, found at http://onewaytobalance.blogspot.com
- * 
- * Program pretty much runs on an interrupt.
- * Configurations, settings and global variables/objects found in ballbot.h
- *
- * Only runs on Teensy 3.x and requires a decent clock (I use 96MHz)
- * This is because it is quite processing intensive since the single MCU does
- *    - on board Mahony sensor fusion at >1000Hz using 9dof data from the MPU9250
- *          --> converting quaternions to Euler angles unfortunately requires CPU intensive 
- *                inverse trigonometry
- *    - PID roll/pitch control in 2 dimensions (i.e. two PID control loops for balancing)
- *    - Polling encoders at a high sample rate (64cpr encoders and a 12400rpm motor - no load)
- *            --> Finding velocity of each of the 3 wheels
- *    - Using wheel velocities and trig to obtain absolate location/position of robot
- *          see http://onewaytobalance.blogspot.com.au/2015/12/omnidirectional-control.html
- *          The maths requires you to have a basic understanding of linear algebra (matrices etc.)
- *    - PID control for position of robot
- *    - Debugging via bluetooth and serial to computer (the RN42 is quite slow)
- *    
+/* Ballbot.h - Header file for ballbot program
  *
  * (C) Brian Chen 2015
  */

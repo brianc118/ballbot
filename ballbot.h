@@ -173,8 +173,8 @@ public:
             i++;
         }
         if (tok != 0 || i != len){
-            port.println("Incorrect number of inputs:");
-            port.print('\t');
+            port.println("$Incorrect number of inputs:");
+            port.print("$\t");
             port.print(len);
             port.println(" comma separated values required");
             return false;
@@ -187,18 +187,18 @@ public:
 
         bController.disable();
 
-        port.println("Starting magnetometer calibration");                    
+        port.println("$Starting magnetometer calibration");                    
         calibMagRoutine();
-        port.println("Finished calibration");
+        port.println("$Finished calibration");
         storeMagCalib();
-        port.println("Stored calibration");
+        port.println("$Stored calibration");
 
         if (bcBalanceEnabled) bController.enableBalance();
         if (bcPosCorEnabled)  bController.enablePosCorrection();
     }
     void info(){
-    	port.println("Status: ");
-        port.print('\t');
+    	port.println("$Status: ");
+        port.print("$\t");
         port.print("balanceEnabled = ");
         port.print(bController.balanceEnabled()); port.print(", ");
         port.print("posCorEnabled = ");
@@ -218,8 +218,8 @@ public:
             default:                            port.print("???");                          break;                        
         }
         port.println(")");
-        port.println("Tunings: ");
-        port.print('\t');
+        port.println("$Tunings: ");
+        port.print("$\t");
         port.print(bController.kp_theta, 8);     port.print(", ");
         port.print(bController.ki_theta, 8);     port.print(", ");
         port.print(bController.kd_theta, 8);     port.print(", ");
@@ -272,7 +272,7 @@ public:
                         bController.setTunings(my_array[0], my_array[1], my_array[2],
                                                my_array[3], my_array[4], my_array[5],
                                                my_array[6], my_array[7], my_array[8]);
-                        port.println("Set PID parameters: ");      port.print('\t');                        
+                        port.println("$Set PID parameters: ");      port.print('\t');                        
                         port.print(my_array[0], 8);                port.print('\t');
                         port.print(my_array[1], 8);                port.print('\t');
                         port.print(my_array[2], 8);                port.print('\t');
@@ -292,15 +292,15 @@ public:
                 case 'e':
                     {
                     if (buffer[1] == 'b'){
-                        port.println("Enabled balancing");
+                        port.println("$Enabled balancing");
                         bController.enableBalance();
                     }
                     else if (buffer[1] == 'p'){
-                        port.println("Enabled pos correction");
+                        port.println("$Enabled pos correction");
                         bController.enablePosCorrection();
                     }
                     else{
-                        port.println("Enabled bController");
+                        port.println("$Enabled bController");
                         bController.enable();
                     }
                     }
@@ -308,15 +308,15 @@ public:
                 case 'd':
                     {
                     if (buffer[1] == 'b'){
-                        port.println("Disabled balancing");
+                        port.println("$Disabled balancing");
                         bController.disableBalance();
                     }
                     else if (buffer[1] == 'p'){
-                        port.println("Disabled pos correction");
+                        port.println("$Disabled pos correction");
                         bController.disablePosCorrection();
                     }
                     else{
-                        port.println("Disabled bController");
+                        port.println("$Disabled bController");
                         bController.disable();
                     }
                     }
@@ -335,20 +335,20 @@ public:
                     float my_array[1];
                     if (readData(buffer, my_array, 1)){
                         if (my_array[0] <= 0){
-                            port.println("Amplitude cannot be negative or zero");
+                            port.println("$Amplitude cannot be negative or zero");
                         }
                         else if (my_array[0] <= 20){
-                            port.println("Minimum amplitude of 20 required");
+                            port.println("$Minimum amplitude of 20 required");
                         }
                         else if (my_array[0] > 255){
-                            port.println("Maximum amplitude of 255");
+                            port.println("$Maximum amplitude of 255");
                         }
                         else{
-                            port.print("Amplitude set at ");
+                            port.print("$Amplitude set at ");
                             calibMotorModeAmplitude = (int)my_array[0];
-                            port.println("Enabled calib motor mode.");
-                            port.println("Disabled balancing (if not already)");
-                            port.println("---");
+                            port.println("$Enabled calib motor mode.");
+                            port.println("$Disabled balancing (if not already)");
+                            port.println("$---");
 
                             calibMotorMode = true;
                             calibMotorModeDt = 0;
@@ -365,7 +365,7 @@ public:
                     }                    
                     break;
                 case '-':
-                    port.println("Disabled calib motor mode.");
+                    port.println("$Disabled calib motor mode.");
                     delay(1000); // so you can see the text
                     calibMotorMode = false;
                     pA = 0; pB = 0; pC = 0;
@@ -379,7 +379,7 @@ public:
                     float my_array[1];
 
                     if (readData(buffer, my_array, 1)){
-                        port.print("Set motorMinPwr from ");
+                        port.print("$Set motorMinPwr from ");
                         port.print(motorMinPwr);
                         port.print(" to ");
                         motorMinPwr = (uint8_t)my_array[0];
@@ -397,7 +397,7 @@ public:
 
                     if (buffer[1] == 'i'){
                         zeroImu();
-                        port.print("Zeroed at r = ");
+                        port.print("$Zeroed at r = ");
                         port.print(roll_offset);
                         port.print(" p = ");
                         port.println(pitch_offset);
@@ -406,7 +406,7 @@ public:
                         pos_x = 0;
                         pos_y = 0;
                         lCalculator.zero();
-                        port.println("Zeroed position");
+                        port.println("$Zeroed position");
                     }
 
                     if (bcBalanceEnabled) bController.enableBalance();
@@ -417,31 +417,31 @@ public:
                     {
                     if (buffer[1] == 'b'){
                         // balance. correction tunings
-                        port.println("Stored balance tunings");
+                        port.println("$Stored balance tunings");
                         storeBalanceTunings();
                     }
                     else if (buffer[1] == 'p'){
                         // pos. correction tunings
-                        port.println("Stored pos. tunings");
+                        port.println("$Stored pos. tunings");
                         storePosTunings();
                     }
                     else if (buffer[1] == 'i'){
                         // imu offset
-                        port.println("Stored IMU offset");
+                        port.println("$Stored IMU offset");
                         storeIMUOffset();
                     }
                     else if (buffer[1] == 's'){
                         // current state (i.e. which things are enabled)
-                        port.println("Stored current state");
+                        port.println("$Stored current state");
                         storeState();
                     }
                     else if (buffer[1] == 'm'){
-                        port.println("Stored motor min power");
+                        port.println("$Stored motor min power");
                         storeMotorMinPwr();
                     }
                     else{
                         // all of it
-                        port.println("Stored all of it");
+                        port.println("$Stored all of it");
                         storeBalanceTunings();
                         storePosTunings();
                         storeIMUOffset();
@@ -454,32 +454,32 @@ public:
                     {
                     if (buffer[1] == 'b'){
                         // balance. correction tunings
-                        port.println("Read balance tunings");
+                        port.println("$Read balance tunings");
                         readBalanceTunings();
                     }
                     else if (buffer[1] == 'p'){
                         // pos. correction tunings
-                        port.println("Read pos. tunings");
+                        port.println("$Read pos. tunings");
                         readPosTunings();
                     }
                     else if (buffer[1] == 'i'){
                         // imu offset
-                        port.println("Read IMU offset");
+                        port.println("$Read IMU offset");
                         readIMUOffset();
                     }
                     else if (buffer[1] == 's'){
                         // current state (i.e. which things are enabled)
-                        port.println("Read previous state");
+                        port.println("$Read previous state");
                         readState();
                     }
                     else if (buffer[1] == 'm'){
                         // motor min power
-                        port.println("Read motor min power");
+                        port.println("$Read motor min power");
                         readMotorMinPwr();
                     }
                     else{
                         // all of it
-                        port.println("Read all of it");
+                        port.println("$Read all of it");
                         readBalanceTunings();
                         readPosTunings();
                         readIMUOffset();
@@ -503,7 +503,7 @@ public:
                     // special commands that don't require newline
                     case 'E':
                         {
-                        port.println("Enabled bController");
+                        port.println("$Enabled bController");
                         bController.enable();
                         }
                         break;
@@ -554,6 +554,7 @@ public:
         return 1;
     }
     void sendNames(){
+        print("$");
     	print("now");   			    print('\t');
     	print("roll");  			    print('\t');
     	print("pitch"); 			    print('\t');

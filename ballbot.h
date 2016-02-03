@@ -206,7 +206,7 @@ public:
         port.print("calibMotorMode = ");
         port.print(calibMotorMode);               port.print(", ");
         port.print("min motor power = ");         port.print(", ");
-        port.print(motorMinPwr);
+        port.print(motorMinPwr);                  port.print(", ");
         port.print("blinkInterval = ");
         port.print(blinkInterval);
         port.print(" (");

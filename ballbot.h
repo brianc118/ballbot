@@ -156,7 +156,6 @@ void fusionUpdate();
 void fusionGetEuler();
 inline void encoderPoll();
 inline void encoderGetVelocity();
-bool bluetoothEcho();
 void calibMotorModeRoutine();
 
 // controller for serial interface

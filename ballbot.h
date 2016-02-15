@@ -97,7 +97,7 @@ PMOTOR motorC(MT_C_PWM, MT_C_DIR, MT_C_BRK, MT_C_FLIP, MT_C_CS);
 int32_t pA, pB, pC;
 float pA_f, pB_f, pC_f;
 float pidOutA, pidOutB, pidOutC;
-uint8_t motorMinPwr = 12;
+uint8_t motorMinPwr = 0;
 float motorPwrScalar = 0.8;
 
 bool motorPidControl = false;
@@ -438,6 +438,11 @@ public:
                         port.println("$Stored motor min power");
                         storeMotorMinPwr();
                     }
+                    else if (buffer[1] == 'M'){
+                        // magnetometer calibrations
+                        port.println("$Stored mag calib");
+                        storeMagCalib();
+                    }
                     else{
                         // all of it
                         port.println("$Stored all of it");
@@ -476,13 +481,19 @@ public:
                         port.println("$Read motor min power");
                         readMotorMinPwr();
                     }
+                    else if (buffer[1] == 'M'){
+                        // magnetometer calibrations
+                        port.println("$Read mag calib");
+                        readMagCalib();
+                    }
                     else{
                         // all of it
                         port.println("$Read all of it");
+                        readMagCalib();
                         readBalanceTunings();
                         readPosTunings();
-                        readIMUOffset();
                         readState();
+                        readIMUOffset();
                         readMotorMinPwr();
                     }
                     }
@@ -755,8 +766,9 @@ void calibMagRoutine(){
     mag_max[1] = 0xFFFF;    mag_min[1] = 0x7FFF;
     mag_max[2] = 0xFFFF;    mag_min[2] = 0x7FFF;    
 
+    // calibrate for up to 100 seconds or until serial receives data
     for(ii = 0; ii < sample_count; ii++) {
-        digitalWriteFast(LED, !digitalReadFast(LED));
+        digitalWriteFast(LED, !digitalReadFast(LED));   // fast blinking
         mpu.read_mag();
 
         for (int jj = 0; jj < 3; jj++) {
@@ -764,9 +776,10 @@ void calibMagRoutine(){
             if(mpu.mag_data_raw[jj] < mag_min[jj]) mag_min[jj] = mpu.mag_data_raw[jj];
         }
         delay(10);  // AK8963 mode 2 => 100Hz
-        if (Serial.available()) break;
+        if (Serial.available() || BT.available()) break;
     }
     CLEARSERIAL();
+    CLEARBT();
 
     calcMagCalib();
 

@@ -54,7 +54,7 @@ void btSetup(uint8_t module, int initBaud, int finalBaud){
 }
 
 bool bluetoothEcho(){
-    Serial.println("hi")
+    Serial.println("hi");
     char c;
     if(BT.available()){
         Serial.print((char)BT.read());  
@@ -66,3 +66,7 @@ bool bluetoothEcho(){
     }
     return true;
 }
+
+#define CLEARBT(){                  \
+    while (BT.available()){         \
+        BT.read();    }}              \

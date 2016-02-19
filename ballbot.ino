@@ -1,6 +1,5 @@
 /* Program for my ballbot, found at http://onewaytobalance.blogspot.com
  * 
- * Program pretty much runs on an interrupt.
  * Configurations, settings and global variables/objects found in ballbot.h
  *
  * Only runs on Teensy 3.x and requires a decent clock (I use 96MHz)

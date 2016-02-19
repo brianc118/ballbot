@@ -1,37 +1,11 @@
 /* Library for my ballbot, found at http://onewaytobalance.blogspot.com
  * 
+ * For a good explanation of the maths here, see
+ * http://onewaytobalance.blogspot.com.au/2015/12/omnidirectional-control.html
+ *
  * Open sourced under the MIT License (see LICENSE.txt)
  * (c) Brian Chen 2015
  */
-
-/*
-
-Solve linear system for [v_x_rel  v_y_rel  R_w]^T
-
-[v1]   [ -sin(theta_a)  cos(theta_a)  1] [v_x_rel]
-[v2] = [ -sin(theta_b)  cos(theta_b)  1] [v_y_rel]
-[v3]   [ -sin(theta_c)  cos(theta_c)  1] [R_w    ]
-
-[v1]   [ -s_a  c_a  1] [v_x_rel]
-[v2] = [ -s_c  c_b  1] [v_y_rel]
-[v3]   [ -s_b  c_c  1] [R_w    ]
-
-[v_x_rel]   [ -s_a  c_a  1]^-1 [v1]
-[v_y_rel] = [ -s_c  c_b  1]    [v2]
-[R_w    ]   [ -s_b  c_c  1]    [v3]
-
-[v_x_rel]                                                                   [ (c_b - c_c)          (c_c - c_a)          (c_a - c_b)         ] [v1]
-[v_y_rel] =   1/(c_c*s_a - c_b*s_a + c_a*s_b - c_c*s_b + c_b*s_c - c_a*s_c) [ (s_b - s_c)          (s_c - s_a)          (s_a - s_b)         ] [v2]
-[R*w    ]                                                                   [ (c_b*s_c - c_c*s_b)  (c_c*s_a - c_a*s_c)  (c_a*s_b - c_b*s_a) ] [v3]
-
-Transformation of (v_x_rel, v_y_rel) to (v_x, v_y) -- real coordinates
-
-[v_x] = [cos(alpha) -sin(alpha)][v_x_rel]
-[v_y]   [sin(alpha)  cos(alpha)][v_y_rel]
-
-where alpha = 
-
-*/
 
 #define SINDEG(a)(sin(a*PI/180))
 #define COSDEG(a)(cos(a*PI/180))

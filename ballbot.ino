@@ -60,7 +60,7 @@ extern "C" int main () {
     Serial.begin(115200);   // doesn't really matter what we put here (Teensy 3.x serial isn't "real" serial)
 
     pinMode(INT_PIN, INPUT);
-    pinMode(LED, OUTPUT);    digitalWriteFast(LED, HIGH);   // initial set LEDs on high
+    pinMode(LED, OUTPUT);     digitalWriteFast(LED, HIGH);   // initial set LEDs on high
     pinMode(LED2, OUTPUT);    digitalWriteFast(LED2, HIGH);
 
     btSetup(HC06, 921600, BAUD_1382400);    
@@ -114,7 +114,7 @@ extern "C" int main () {
     readIMUOffset();
     readMotorMinPwr();
 
-    mpuRead(); // takes long time
+    mpuRead();       // takes long time
     fusionUpdate();  // takes long time
     fusionGetEuler();
     zeroImu();

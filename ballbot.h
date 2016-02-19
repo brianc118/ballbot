@@ -162,6 +162,151 @@ void calibMotorModeRoutine();
 class SerialController : public Print{
 public:
     SerialController(Stream& _port): port(_port) {}
+
+    void sendNames(){
+        print("$");
+        print("now");                   print('\t');
+        print("roll");                  print('\t');
+        print("pitch");                 print('\t');
+        print("e_theta_x*kp");          print('\t');
+        print("e_theta_y*kp");          print('\t');    
+        print("int_theta_x");           print('\t');
+        print("int_theta_y");           print('\t');
+        print("d_theta_x*kd_theta");    print('\t');
+        print("d_theta_y*kd_theta");    print('\t');
+
+        print("e_v_x*kp_v"); print('\t');
+        print("e_v_y*kp_v"); print('\t');    
+        print("int_v_x");    print('\t');
+        print("int_v_y");    print('\t');
+        print("d_v_x*kd_v"); print('\t');
+        print("d_v_y*kd_v"); print('\t');
+
+        print("e_pos_x*kp_pos"); print('\t');
+        print("e_pos_y*kp_pos"); print('\t');    
+        print("int_pos_x");      print('\t');
+        print("int_pos_y");      print('\t');
+        print("d_pos_x*kd_pos"); print('\t');
+        print("d_pos_y*kd_pos"); print('\t');
+        
+        print("v_x");      print('\t');
+        print("v_y");      print('\t');
+        print("pA");       print('\t');
+        print("pB");       print('\t');
+        print("pC");       print('\t');
+        print("pos_x");    print('\t');
+        println("pos_y");
+    }
+    void debug(){
+        print(now);                                             print('\t');
+        print(roll);                                            print('\t');
+        print(pitch);                                           print('\t');
+        print(bController.e_theta_x * bController.kp_theta);    print('\t');
+        print(bController.e_theta_y * bController.kp_theta);    print('\t');    
+        print(bController.int_theta_x);                         print('\t');
+        print(bController.int_theta_y);                         print('\t');
+        print(bController.d_theta_x * bController.kd_theta);    print('\t');
+        print(bController.d_theta_y * bController.kd_theta);    print('\t');
+
+        print(bController.e_v_x * bController.kp_v); print('\t');
+        print(bController.e_v_y * bController.kp_v); print('\t');    
+        print(bController.int_v_x);                  print('\t');
+        print(bController.int_v_y);                  print('\t');
+        print(bController.d_v_x * bController.kd_v); print('\t');
+        print(bController.d_v_y * bController.kd_v); print('\t');
+        
+        print(bController.e_pos_x * bController.kp_pos); print('\t');
+        print(bController.e_pos_y * bController.kp_pos); print('\t');    
+        print(bController.int_pos_x);                    print('\t');
+        print(bController.int_pos_y);                    print('\t');
+        print(bController.d_pos_x * bController.kd_pos); print('\t');
+        print(bController.d_pos_y * bController.kd_pos); print('\t');
+        
+        print(v_x);      print('\t');
+        print(v_y);      print('\t');
+        print(pA);       print('\t');
+        print(pB);       print('\t');
+        print(pC);       print('\t');
+        print(pos_x);    print('\t');
+        println(pos_y);
+    }
+
+    // magnetometer calibration routine
+    void calibMag(){
+    	bcBalanceEnabled = bController.balanceEnabled();
+        bcPosCorEnabled = bController.posCorEnabled();
+
+        bController.disable();
+
+        port.println("$Starting magnetometer calibration. Send any string to finish calibration.");                    
+        calibMagRoutine();
+        port.println("$Finished calibration");
+        storeMagCalib();
+
+        if (bcBalanceEnabled) bController.enableBalance();
+        if (bcPosCorEnabled)  bController.enablePosCorrection();
+    }
+
+    void info(){
+    	port.println("$Status: ");
+        port.print("$\t");
+        port.print("balanceEnabled = ");
+        port.print(bController.balanceEnabled()); port.print(", ");
+        port.print("posCorEnabled = ");
+        port.print(bController.posCorEnabled());  port.print(", ");
+        port.print("calibMotorMode = ");
+        port.print(calibMotorMode);               port.print(", ");
+        port.print("min motor power = ");         port.print(", ");
+        port.print(motorMinPwr);                  port.print(", ");
+        port.print("blinkInterval = ");
+        port.print(blinkInterval);
+        port.print(" (");
+        switch(blinkInterval){
+            case BLINK_OK_INTERVAL:             port.print("BLINK_OK_INTERVAL");          break;
+            case BLINK_STOPPED_INTERVAL:        port.print("BLINK_STOPPED_INTERVAL");     break;                
+            case BLINK_CALIB_MOTOR_INTERVAL:    port.print("BLINK_CALIB_MOTOR_INTERVAL"); break;                        
+            case BLINK_SENSOR_ERR_INTERVAL:     port.print("BLINK_SENSOR_ERR_INTERVAL");  break;                
+            default:                            port.print("UNKNOWN blinkInterval");      break;                        
+        }
+        port.println(")");
+        port.println("$Tunings: ");
+        port.print("$\t");
+        port.print(bController.kp_theta, 8);     port.print(", ");
+        port.print(bController.ki_theta, 8);     port.print(", ");
+        port.print(bController.kd_theta, 8);     port.print(", ");
+        port.print(bController.kp_v, 8);    port.print(", ");
+        port.print(bController.ki_v, 8);    port.print(", ");
+        port.print(bController.kd_v, 8);    port.print(", ");
+        port.print(bController.kp_pos, 8);       port.print(", ");
+        port.print(bController.ki_pos, 8);       port.print(", ");
+        port.println(bController.kd_pos, 8);
+        port.println("$Magnetometer:");
+        port.print("$\t");
+        port.print("mag_scalar:\t{");
+        port.print(mag_scalar[0]); port.print(", ");
+        port.print(mag_scalar[1]); port.print(", ");
+        port.print(mag_scalar[2]);
+        port.print("}\tmag_bias:\t{");
+        port.print(mag_bias[0]); port.print(", ");
+        port.print(mag_bias[1]); port.print(", ");
+        port.print(mag_bias[2]);
+        port.println("}");
+        port.println("$Stored calibration");
+    }
+
+    void disableDebug(){
+    	btDebug = false;
+        serDebug = false;
+    }
+
+    void enableDebug(){
+    	btDebug = true;
+        serDebug = true;
+    }
+
+    // Reads number array from string with a comma delimiter.
+    // If the number of elements is unequal to len, an error
+    // message will be sent through the port.
     bool readData(char buff[], float my_array[], int len){
         int i = 0;
         char *tok = strtok(buff, ",");
@@ -180,63 +325,9 @@ public:
         }
         return true;
     }
-    void calibMag(){
-    	bcBalanceEnabled = bController.balanceEnabled();
-        bcPosCorEnabled = bController.posCorEnabled();
 
-        bController.disable();
-
-        port.println("$Starting magnetometer calibration");                    
-        calibMagRoutine();
-        port.println("$Finished calibration");
-        storeMagCalib();
-        port.println("$Stored calibration");
-
-        if (bcBalanceEnabled) bController.enableBalance();
-        if (bcPosCorEnabled)  bController.enablePosCorrection();
-    }
-    void info(){
-    	port.println("$Status: ");
-        port.print("$\t");
-        port.print("balanceEnabled = ");
-        port.print(bController.balanceEnabled()); port.print(", ");
-        port.print("posCorEnabled = ");
-        port.print(bController.posCorEnabled());  port.print(", ");
-        port.print("calibMotorMode = ");
-        port.print(calibMotorMode);               port.print(", ");
-        port.print("min motor power = ");         port.print(", ");
-        port.print(motorMinPwr);                  port.print(", ");
-        port.print("blinkInterval = ");
-        port.print(blinkInterval);
-        port.print(" (");
-        switch(blinkInterval){
-            case BLINK_OK_INTERVAL:             port.print("BLINK_OK_INTERVAL");          break;
-            case BLINK_STOPPED_INTERVAL:        port.print("BLINK_STOPPED_INTERVAL");      break;                
-            case BLINK_CALIB_MOTOR_INTERVAL:    port.print("BLINK_CALIB_MOTOR_INTERVAL"); break;                        
-            case BLINK_SENSOR_ERR_INTERVAL:     port.print("BLINK_SENSOR_ERR_INTERVAL");  break;                
-            default:                            port.print("???");                          break;                        
-        }
-        port.println(")");
-        port.println("$Tunings: ");
-        port.print("$\t");
-        port.print(bController.kp_theta, 8);     port.print(", ");
-        port.print(bController.ki_theta, 8);     port.print(", ");
-        port.print(bController.kd_theta, 8);     port.print(", ");
-        port.print(bController.kp_v, 8);    port.print(", ");
-        port.print(bController.ki_v, 8);    port.print(", ");
-        port.print(bController.kd_v, 8);    port.print(", ");
-        port.print(bController.kp_pos, 8);       port.print(", ");
-        port.print(bController.ki_pos, 8);       port.print(", ");
-        port.println(bController.kd_pos, 8);
-    }
-    void disableDebug(){
-    	btDebug = false;
-        serDebug = false;
-    }
-    void enableDebug(){
-    	btDebug = true;
-        serDebug = true;
-    }
+    // essentially a large switch that performs commands based
+    // on port input
     void update(){
         if (ready){
             ready = false;
@@ -510,7 +601,7 @@ public:
             while (port.available()){
                 incoming_c = port.read();                        
                 switch(incoming_c){
-                    // special commands that don't require newline
+                    // direct commands that don't require newline
                     case 'E':
                         {
                         port.println("$Enabled bController");
@@ -540,6 +631,8 @@ public:
             }
         }
     }
+
+    // appends character to output buffer
     void append(char c){
         outBuffer[outBuffIndex] = c;
         outBuffIndex++;
@@ -549,6 +642,7 @@ public:
         }
     }
 
+    // sends output buffer to port
     void send(){
         for (int i = 0; i < outBuffIndex; i++){
             port.print(outBuffer[i]);
@@ -557,78 +651,11 @@ public:
         outBuffIndex = 0;
     }
 
-    using Print::write;   // inherit Print (see core libraries)
+    using Print::write;   // inherits Print (see core libraries)
 
     size_t write(uint8_t b){
         append((char)b);
         return 1;
-    }
-    void sendNames(){
-        print("$");
-    	print("now");   			    print('\t');
-    	print("roll");  			    print('\t');
-    	print("pitch"); 			    print('\t');
-    	print("e_theta_x*kp"); 		    print('\t');
-    	print("e_theta_x*kp"); 		    print('\t');    
-        print("int_theta_x");  		    print('\t');
-        print("int_theta_y");           print('\t');
-        print("d_theta_x*kd_theta");    print('\t');
-        print("d_theta_y*kd_theta");    print('\t');
-
-        print("e_v_x*kp_v"); print('\t');
-        print("e_v_y*kp_v"); print('\t');    
-        print("int_v_x");    print('\t');
-        print("int_v_y");    print('\t');
-        print("d_v_x*kd_v"); print('\t');
-        print("d_v_y*kd_v"); print('\t');
-
-        print("e_pos_x*kp_pos"); print('\t');
-        print("e_pos_y*kp_pos"); print('\t');    
-        print("int_pos_x");      print('\t');
-        print("int_pos_y");      print('\t');
-        print("d_pos_x*kd_pos"); print('\t');
-        print("d_pos_y*kd_pos"); print('\t');
-        
-        print("v_x");      print('\t');
-        print("v_y");      print('\t');
-        print("pA");       print('\t');
-        print("pB");       print('\t');
-        print("pC");       print('\t');
-        print("pos_x");    print('\t');
-        println("pos_y");
-    }
-    void debug(){
-        print(now);                                             print('\t');
-        print(roll);                                            print('\t');
-        print(pitch);                                           print('\t');
-        print(bController.e_theta_x * bController.kp_theta);    print('\t');
-        print(bController.e_theta_y * bController.kp_theta);    print('\t');    
-        print(bController.int_theta_x);                         print('\t');
-        print(bController.int_theta_y);                         print('\t');
-        print(bController.d_theta_x * bController.kd_theta);    print('\t');
-        print(bController.d_theta_y * bController.kd_theta);    print('\t');
-
-        print(bController.e_v_x * bController.kp_v); print('\t');
-        print(bController.e_v_y * bController.kp_v); print('\t');    
-        print(bController.int_v_x);                  print('\t');
-        print(bController.int_v_y);                  print('\t');
-        print(bController.d_v_x * bController.kd_v); print('\t');
-        print(bController.d_v_y * bController.kd_v); print('\t');
-        
-        print(bController.e_pos_x * bController.kp_pos); print('\t');
-        print(bController.e_pos_y * bController.kp_pos); print('\t');    
-        print(bController.int_pos_x);                    print('\t');
-        print(bController.int_pos_y);                    print('\t');
-        print(bController.d_pos_x * bController.kd_pos); print('\t');
-        print(bController.d_pos_y * bController.kd_pos); print('\t');
-        
-        print(v_x);      print('\t');
-        print(v_y);      print('\t');
-        print(pA);       print('\t');
-        print(pB);       print('\t');
-        print(pC);       print('\t');
-        print(pos_x);    print('\t');
-        println(pos_y);
     }
 private:
     Stream &port;
@@ -865,6 +892,26 @@ void mpuRead(){
  *
  */
 
+void Compass_Heading(){
+    float mag_x;
+    float mag_y;
+    float cos_roll;
+    float sin_roll;
+    float cos_pitch;
+    float sin_pitch;
+
+    cos_roll = cos(roll);
+    sin_roll = sin(roll);
+    cos_pitch = cos(pitch);
+    sin_pitch = sin(pitch);
+
+    // Tilt compensated magnetic field X
+    mag_x = mpu.mag_data[1] * cos_pitch + mpu.mag_data[0] * sin_roll * sin_pitch + mpu.mag_data[2] * cos_roll * sin_pitch;
+    // Tilt compensated magnetic field Y
+    mag_y = mpu.mag_data[0] * cos_roll - mpu.mag_data[2] * sin_roll;
+    // Magnetic Heading
+    float MAG_Heading = atan2(-mag_y, mag_x);
+}
 void fusionUpdate(){
     float readIMUdt_s = readIMUdt/1000000.0f;
     readIMUdt = 0;
@@ -885,6 +932,8 @@ void fusionGetEuler(){
     sensfusionGetEulerRPY(&roll, &pitch, &yaw);
     roll -= roll_offset;
     pitch -= pitch_offset;
+
+    Compass_Heading();
 }
 
 /* Poll encoders

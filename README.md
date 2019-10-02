@@ -1,5 +1,4 @@
 # Code for a self balancing ballbot
-WORK IN PROGRESS
 
 Dependencies (other custom libraries needed):
 - EEPROMAnything     // see https://github.com/brianchen118/Team-PI-Lib/tree/master/EEPROMAnything
